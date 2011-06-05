@@ -8,25 +8,10 @@ module Ssh.Transport (
     , getSmallBlock
 ) where
 
-import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
-                   , hostAddress
-                   )
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-import Network.Socket.ByteString.Lazy
-
 import Control.Monad
 import qualified Control.Monad.State as MS
-import Data.List
-import Data.Maybe
-import Data.Monoid
-import Data.Bits
 
 import Network
-import System.IO
-import System.Random
-import Data.Char
-import Data.Word
-import Data.LargeWord
 import Data.Int
 
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -34,7 +19,6 @@ import qualified Data.ByteString.Lazy.Char8 as B
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
-
 
 import Ssh.Cryption
 import Ssh.KeyExchange

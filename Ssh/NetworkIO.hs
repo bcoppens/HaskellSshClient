@@ -23,18 +23,10 @@ import Network.Socket.ByteString.Lazy
 
 import Control.Monad
 import qualified Control.Monad.State as MS
-import Data.List
-import Data.Maybe
 import Data.Monoid
 import Data.Bits
-
-import Network
-import System.IO
-import System.Random
-import Data.Char
-import Data.Word
-import Data.LargeWord
 import Data.Int
+import Data.Char
 
 import qualified Data.ByteString.Lazy.Char8 as B
 

@@ -8,40 +8,11 @@ module Ssh.Packet (
     , getPacket
 ) where
 
-import Network
-import System.IO
-import System.Random
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
-import Data.Char
-import Data.Word
 import Control.Monad
-import qualified Control.Monad.State as MS
-import Data.List
-import Data.Maybe
-import Data.Monoid
-import Data.Bits
 import qualified Data.ByteString.Lazy.Char8 as B
-import qualified Data.ByteString.Char8 as BS
-
-import Data.Int
-import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
-                   , hostAddress
-                   )
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-import Network.Socket.ByteString.Lazy
-
--- Non-'standard' functionality
-import OpenSSL.BN -- modexp, random Integers
-
-import Data.HMAC
-import Data.Digest.Pure.SHA
-import qualified Codec.Encryption.AES as AES
-import Codec.Utils
-import Data.LargeWord
-
-import Debug.Trace
 
 import Ssh.NetworkIO
 

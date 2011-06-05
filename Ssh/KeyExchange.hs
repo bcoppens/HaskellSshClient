@@ -4,19 +4,12 @@ module Ssh.KeyExchange (
     , makeWord8
 ) where
 
-import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
-                   , hostAddress
-                   )
 import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-import Network.Socket.ByteString.Lazy
 
 import qualified Data.ByteString.Lazy.Char8 as B
 
 import Data.Word
-import Codec.Utils
-import Data.LargeWord
 import Data.Digest.Pure.SHA
-
 
 import Ssh.Packet
 import Ssh.ConnectionData
