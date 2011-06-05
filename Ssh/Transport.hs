@@ -14,7 +14,7 @@ import qualified Control.Monad.State as MS
 import Network
 import Data.Int
 
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
 
 import Data.Binary
 import Data.Binary.Get
@@ -70,9 +70,10 @@ makeSshPacket' t payload padding = runPut $ do
 paddingLength :: SshTransport -> Int -> Int
 paddingLength t packLen = 8 + (-packLen - 5) `mod` (max 8 (blockSize $ crypto t)) -- TODO 8+ ...
 
+nullByte = toEnum $ fromEnum '\0'
 
 makeSshPacket :: SshTransport -> SshString -> SshString
-makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (paddingLength t $ fromEnum $ B.length payload) '\0' -- TODO make padding random
+makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (paddingLength t $ fromEnum $ B.length payload) nullByte -- TODO make padding random
 
 sGetPacket :: (Get Packet) -> SshTransport -> Socket -> IO ServerPacket
 sGetPacket kih t s = do

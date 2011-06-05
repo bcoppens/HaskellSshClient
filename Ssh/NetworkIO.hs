@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Ssh.NetworkIO (
       NameList(..)
     , sockReadLine
@@ -28,7 +30,8 @@ import Data.Bits
 import Data.Int
 import Data.Char
 
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
+import Data.ByteString.Lazy.Char8 () -- IsString instance for the above
 
 import Data.Binary
 import Data.Binary.Get
@@ -48,7 +51,7 @@ sockReadBytes s c = rrb s (fromIntegral c) mempty
 sockReadLine' :: Socket -> B.ByteString -> IO B.ByteString
 sockReadLine' socket string = do
     got <- recv socket 1
-    if B.unpack got == "\n"
+    if got == "\n"
         then return string
         else sockReadLine' socket $ B.append string got
 
@@ -59,7 +62,7 @@ sockReadLine s = sockReadLine' s mempty
 encodeAsWord32 i = fromInteger $ toInteger i :: Word32
 encodeAsWord8 i = fromInteger $ toInteger i :: Word8
 
-putRawByteString b = forM_ (map (fromInteger . toInteger . ord) $ B.unpack b) (put :: Word8 -> Put)
+putRawByteString b = forM_ (B.unpack b) (put :: Word8 -> Put)
 
 getWord32 = getWord32be
 putWord32 = putWord32be
@@ -71,9 +74,11 @@ data NameList = NameList {
 instance Show NameList where
     show nl = show $ map B.unpack $ names nl
 
+comma = toEnum $ fromEnum ','
+
 putNameList :: NameList -> Put
 putNameList l = do
-    let fullList = B.intercalate (B.singleton ',') $ names l
+    let fullList = B.intercalate (B.singleton comma) $ names l
     put $ encodeAsWord32 $ B.length fullList
     putRawByteString fullList
 
@@ -87,7 +92,7 @@ getNameList :: Get NameList
 getNameList = do
     len <- getWord32
     list <- replicateM (fromEnum len) getWord8
-    return $ NameList $ map B.pack (splitListAt (map (toEnum . fromEnum) list) (== ',') [] [])
+    return $ NameList $ map B.pack (splitListAt list (== comma) [] [])
 
 instance Binary NameList where
     put = putNameList

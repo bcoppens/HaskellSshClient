@@ -2,7 +2,7 @@ module Ssh.HostKeyAlgorithm (
     HostKeyAlgorithm (..)
 ) where
 
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
 type SshString = B.ByteString
 
 data HostKeyAlgorithm = HostKeyAlgorithm {
@@ -11,4 +11,4 @@ data HostKeyAlgorithm = HostKeyAlgorithm {
 }
 
 instance Show HostKeyAlgorithm where
-    show = B.unpack . hostKeyAlgorithmName
+    show = show . hostKeyAlgorithmName

@@ -11,7 +11,7 @@ where
 
 import Data.Word
 import Data.Bits
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
 
 import qualified Codec.Encryption.AES as AES
 import Codec.Utils
@@ -27,7 +27,7 @@ data CryptionAlgorithm = CryptionAlgorithm {
 }
 
 instance Show CryptionAlgorithm where
-    show = B.unpack . cryptoName
+    show = show . cryptoName
 
 noCrypto = CryptionAlgorithm "none" (\_ -> id) (\_ -> id) 0 -- for the initial KEX
 

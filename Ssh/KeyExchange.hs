@@ -6,7 +6,8 @@ module Ssh.KeyExchange (
 
 import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
 
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
+import Data.ByteString.Lazy.Char8 () -- IsString instance for the above
 
 import Data.Word
 import Data.Digest.Pure.SHA
@@ -22,11 +23,11 @@ data KEXAlgorithm = KEXAlgorithm {
 }
 
 instance Show KEXAlgorithm where
-    show = B.unpack . kexName
+    show = show . kexName
 
 makeWord8 x = map (toEnum . fromEnum) $ B.unpack x
 
-createKeyData :: SshString -> SshString -> Char -> SshString -> [Word8]
+createKeyData :: SshString -> SshString -> Word8 -> SshString -> [Word8]
 createKeyData sharedSecret exchangeHash typeChar sId =
     makeWord8 $ createKeyData' {-sha1-} (B.concat [sharedSecret, exchangeHash]) (B.concat [B.pack [typeChar], sId])
 

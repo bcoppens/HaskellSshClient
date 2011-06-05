@@ -14,8 +14,7 @@ import Data.Binary.Put
 import Control.Monad
 import qualified Control.Monad.State as MS
 import Data.Bits
-import qualified Data.ByteString.Lazy.Char8 as B
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as B
 
 import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
 import Network.Socket.ByteString.Lazy
@@ -63,9 +62,10 @@ dhComputeExchangeHash clientIdent serverIdent clientKexPayload serverKexPayload 
 dhComputeSharedSecret :: Integer -> Integer -> Integer -> SshString
 dhComputeSharedSecret f x p = runPut $ putMPInt $ modexp f x p
 
+convert = toEnum . fromEnum
 
 filterNewlines :: SshString -> SshString
-filterNewlines s = B.filter (not . (\x -> x == '\n' || x == '\r')) s -- Filter only the FINAL \r\n??? ###
+filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r')) s -- Filter only the FINAL \r\n??? ###
 
 --TODO use hash
 diffieHellmanGroup :: DHGroup -> [KEXAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> IO Packet) -> Socket -> IO ConnectionData
@@ -89,7 +89,7 @@ diffieHellmanGroup (DHGroup p g) clientKEXAlgos clientHostKeys clientCryptos ser
         exchangeHash = dhComputeExchangeHash {-hash-} cvs svs rawClientKexInit rawServerKexInit hostKey e (dh_f dhReply) sharedSecret
         sId = undefined --
         theMap = \c -> createKeyData sharedSecret exchangeHash c sId
-        [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map theMap ['A' .. 'F']
+        [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (theMap . convert) ['A' .. 'F']
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
     putStrLn "A"
     putStrLn $ show hostKey

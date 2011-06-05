@@ -5,7 +5,9 @@ module Ssh.HashMac (
     , noHashMac
 ) where
 
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
+import Data.ByteString.Lazy.Char8 () -- IsString instance for the above
+
 type SshString = B.ByteString
 
 data HashMac = HashMac {
@@ -15,6 +17,6 @@ data HashMac = HashMac {
 }
 
 instance Show HashMac where
-    show = B.unpack . hashName
+    show = show . hashName
 
 noHashMac = HashMac "none" id 0 -- for the initial KEX

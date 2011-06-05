@@ -12,7 +12,7 @@ import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
 import Control.Monad
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
 
 import Ssh.NetworkIO
 
@@ -22,8 +22,8 @@ type SshString = B.ByteString
 data Packet =
     Disconnect { -- 1
       disc_code :: Int
-    , disc_description :: String
-    , disc_language :: String
+    , disc_description :: SshString
+    , disc_language :: SshString
     }
    | ServiceRequest { -- 5
       serviceReqName :: SshString
@@ -83,8 +83,8 @@ getPacket kexInitHelper = do
     case msg of
         1  -> do -- Disconnect
             r <- fromEnum `liftM` getWord32
-            desc <- B.unpack `liftM` getString
-            lang <- B.unpack `liftM` getString
+            desc <- getString
+            lang <- getString
             return $ Disconnect r desc lang
         6  -> do -- ServiceAccept
             s <- getString

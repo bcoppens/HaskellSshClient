@@ -6,7 +6,7 @@ import Data.Word
 import Control.Monad
 import Data.List
 import Data.Maybe
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy as B
 
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
                    , hostAddress
@@ -78,10 +78,10 @@ doKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs s
     return connectiondata
 
 
-getServerVersionString :: Socket -> IO String
+getServerVersionString :: Socket -> IO SshString
 getServerVersionString s = do l <- sockReadLine s
                               if "SSH-2.0" `B.isPrefixOf` l
-                                then return . B.unpack $ l
+                                then return l
                                 else getServerVersionString s
 
 processPacket :: ServerPacket -> IO ()
@@ -98,7 +98,7 @@ main = do
     connection <- connect' "localhost" 22
     --hSetBuffering connection $ BlockBuffering Nothing
     serverVersion <- getServerVersionString connection
-    debug serverVersion
+    debug $ show serverVersion
     sendAll connection clientVersionString
     let dhMeh = dhKexInitGetHelper clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs -- TODO
     cd <- doKex clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection (sGetPacket dhMeh)
