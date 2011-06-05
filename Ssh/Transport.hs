@@ -21,7 +21,7 @@ import Data.Binary.Get
 import Data.Binary.Put
 
 import Ssh.Cryption
-import Ssh.KeyExchange
+import Ssh.KeyExchangeAlgorithm
 import Ssh.HashMac
 import Ssh.Packet
 import Ssh.HostKeyAlgorithm
@@ -37,7 +37,7 @@ data SshTransport = SshTransport {
 } deriving Show
 
 data SshTransportInfo = SshTransportInfo {
-      kex_alg :: KEXAlgorithm
+      kex_alg :: KeyExchangeAlgorithm
     , serverhost_key_alg :: HostKeyAlgorithm
 
     , client2server :: SshTransport
@@ -75,14 +75,14 @@ nullByte = toEnum $ fromEnum '\0'
 makeSshPacket :: SshTransport -> SshString -> SshString
 makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (paddingLength t $ fromEnum $ B.length payload) nullByte -- TODO make padding random
 
-sGetPacket :: (Get Packet) -> SshTransport -> Socket -> IO ServerPacket
-sGetPacket kih t s = do
+sGetPacket :: SshTransport -> Socket -> IO ServerPacket
+sGetPacket t s = do
     (packlen, padlen) <- getSizes s t
     putStrLn $ show (packlen, padlen)
     payload <- sockReadBytes s (packlen - padlen - 1) -- TODO decode as block
     padding <- sockReadBytes s padlen
     -- TODO verify MAC
-    let packet = (runGet (getPacket kih) payload) :: ServerPacket
+    let packet = (runGet getPacket payload) :: ServerPacket
     return $ annotatePacketWithPayload packet payload
 
 getSmallBlock :: Socket -> SshTransport -> Int -> IO SshString

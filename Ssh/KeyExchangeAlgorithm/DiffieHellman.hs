@@ -1,10 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Ssh.KeyExchange.DiffieHellman (
+module Ssh.KeyExchangeAlgorithm.DiffieHellman (
       diffieHellmanGroup
     , dhGroup1
-    , dhKexInitGetHelper
-    , dhKexPutPacketHelper
 ) where
 
 import Data.Binary
@@ -26,7 +24,7 @@ import Data.Digest.Pure.SHA
 
 import Ssh.NetworkIO
 import Ssh.Packet
-import Ssh.KeyExchange
+import Ssh.KeyExchangeAlgorithm
 import Ssh.ConnectionData
 import Ssh.Cryption
 import Ssh.Transport
@@ -68,14 +66,14 @@ filterNewlines :: SshString -> SshString
 filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r')) s -- Filter only the FINAL \r\n??? ###
 
 --TODO use hash
-diffieHellmanGroup :: DHGroup -> [KEXAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> IO Packet) -> Socket -> IO ConnectionData
-diffieHellmanGroup (DHGroup p g) clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs clientVersionString rawClientKexInit rawServerKexInit makeTransportPacket getPacket s = do
+diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> IO Packet) -> Socket -> IO ConnectionData
+diffieHellmanGroup (DHGroup p g) clientVersionString rawClientKexInit rawServerKexInit makeTransportPacket getPacket s = do
     let q = (p - 1) `div` 2 -- let's *assume* this is the order of the subgroup?
     x <- randIntegerOneToNMinusOne q
     let e = modexp g x p
         dhInit = KEXDHInit e
     putStrLn $ show dhInit
-    sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit dhKexPutPacketHelper
+    sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
     dhReply <- getPacket s
     putStrLn $ show dhReply
     newKeys <- getPacket s
@@ -98,32 +96,3 @@ diffieHellmanGroup (DHGroup p g) clientKEXAlgos clientHostKeys clientCryptos ser
     case newKeys of
         NewKeys -> return cd
         _       -> error "Expected NEWKEYS"
-
-dhKexInitGetHelper :: [KEXAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Get Packet
-dhKexInitGetHelper clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
-    c <- replicateM 16 getWord8
-    ka <- parseServerNameListFiltered id (map kexName clientKEXAlgos) `liftM` get
-    hka <- parseServerNameListFiltered id (map hostKeyAlgorithmName clientHostKeys) `liftM` get
-    ecs <- parseServerNameListFiltered id (map cryptoName clientCryptos) `liftM` get
-    esc <- parseServerNameListFiltered id (map cryptoName serverCryptos) `liftM` get
-    mcs <- parseServerNameListFiltered id (map hashName clientHashMacs) `liftM` get
-    msc <- parseServerNameListFiltered id (map hashName serverHashMacs) `liftM` get
-    return $ KEXInit B.empty c ka hka ecs esc mcs msc
-
-dhKexPutPacketHelper :: Packet -> Put
-dhKexPutPacketHelper (KEXInit _ c ka hka ecs esc mcs msc) = do
-    put (20 :: Word8) -- KEXInit
-    forM c put -- Cookie, 16 bytes
-    put $ NameList { names = ka }
-    put $ NameList { names = hka }
-    put $ NameList { names = esc }
-    put $ NameList { names = ecs }
-    put $ NameList { names = mcs }
-    put $ NameList { names = msc }
-    put $ NameList { names = ["none"] } -- compression
-    put $ NameList { names = ["none"] } -- compression
-    put $ NameList { names = [] }
-    put $ NameList { names = [] }
-    put $ (0 :: Word8) -- firstKexFollows
-    putWord32 0 -- Future Use
-dhKexPutPacketHelper p = error $ "This should not happen" ++ show p

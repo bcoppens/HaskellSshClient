@@ -24,7 +24,9 @@ import Ssh.Packet
 import Ssh.KeyExchange
 import Ssh.Cryption
 import Ssh.ConnectionData
-import Ssh.KeyExchange.DiffieHellman
+import Ssh.KeyExchangeAlgorithm
+import Ssh.KeyExchangeAlgorithm.DiffieHellman
+import Ssh.KeyExchange
 import Ssh.HashMac
 import Ssh.HostKeyAlgorithm
 import Ssh.Transport
@@ -52,31 +54,8 @@ clientHashMacs = [ HashMac "hmac-sha1" (error "OEPS") 0 ]
 rsaHostKey = HostKeyAlgorithm "ssh-rsa"
 clientHostKeys = [rsaHostKey]
 
-dhGroup1KEXAlgo = KEXAlgorithm "diffie-hellman-group1-sha1" (diffieHellmanGroup dhGroup1 {-sha1-} clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs) -- IEW RECURSIVE
+dhGroup1KEXAlgo = KeyExchangeAlgorithm "diffie-hellman-group1-sha1" (diffieHellmanGroup dhGroup1 {-sha1-})
 clientKEXAlgos = [dhGroup1KEXAlgo]
-
-doKex :: [KEXAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Socket -> (SshTransport -> Socket -> IO ServerPacket) -> IO ConnectionData
-doKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs s getPacket = do
-    --cookie <- fmap (fromInteger . toInteger) $ replicateM 16 $ (randomRIO (0, 255 :: Int)) :: IO [Word8]
-    let cookie = replicate 16 (-1 :: Word8) -- TODO random
-    let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
-    let initialTransport = SshTransport noCrypto noHashMac
-    sendAll s $ makeSshPacket initialTransport $ runPut $ dhKexPutPacketHelper clientKex -- TODO make configurable
-    putStrLn "Mu"
-    serverKex <- getPacket initialTransport s
-    putStrLn $ show serverKex
-    -- assert KEXInit packet
-    let kex   = head $ kex_algos serverKex
-        kexFn = fromJust $ find (\x -> kexName x == kex) clientKEXAlgos
-        rawClientKexInit = rawPacket clientKex
-        rawServerKexInit = rawPacket serverKex
-        makeTransportPacket = makeSshPacket initialTransport
-    connectiondata <- handleKex kexFn clientVersionString rawClientKexInit rawServerKexInit makeTransportPacket (getPacket initialTransport) s
-    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket NewKeys undefined
-    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket (ServiceRequest "ssh-wololooo") undefined
-    putStrLn "KEX DONE?"
-    return connectiondata
-
 
 getServerVersionString :: Socket -> IO SshString
 getServerVersionString s = do l <- sockReadLine s
@@ -100,8 +79,7 @@ main = do
     serverVersion <- getServerVersionString connection
     debug $ show serverVersion
     sendAll connection clientVersionString
-    let dhMeh = dhKexInitGetHelper clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs -- TODO
-    cd <- doKex clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection (sGetPacket dhMeh)
+    cd <- doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket
     --requestService (B.pack "ssh-userauth")
     clientLoop connection undefined
     sClose connection

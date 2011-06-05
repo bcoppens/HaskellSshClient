@@ -1,6 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Ssh.Packet (
       Packet (..)
-    , parseServerNameListFiltered
     , ClientPacket
     , ServerPacket
     , annotatePacketWithPayload
@@ -63,22 +64,32 @@ annotatePacketWithPayload packet@(KEXInit _ _ _ _ _ _ _ _) pl = packet { rawPack
 annotatePacketWithPayload p _ = p
 
 
-putPacket :: Packet -> (Packet -> Put) -> Put
-putPacket (ServiceRequest n) _ = do
+putPacket :: Packet -> Put
+putPacket (ServiceRequest n) = do
     put (5 :: Word8)
     putString n
-putPacket p@(KEXInit _ _ _ _ _ _ _ _) helper = helper p
-putPacket NewKeys _ = put (21 :: Word8)
-putPacket (KEXDHInit e) _ = do
+putPacket (KEXInit _ c ka hka ecs esc mcs msc) = do
+    put (20 :: Word8) -- KEXInit
+    forM c put -- Cookie, 16 bytes
+    put $ NameList { names = ka }
+    put $ NameList { names = hka }
+    put $ NameList { names = esc }
+    put $ NameList { names = ecs }
+    put $ NameList { names = mcs }
+    put $ NameList { names = msc }
+    put $ NameList { names = ["none"] } -- compression
+    put $ NameList { names = ["none"] } -- compression
+    put $ NameList { names = [] }
+    put $ NameList { names = [] }
+    put $ (0 :: Word8) -- firstKexFollows
+    putWord32 0 -- Future Use
+putPacket NewKeys = put (21 :: Word8)
+putPacket (KEXDHInit e) = do
     put (30 :: Word8)
     putMPInt e
 
--- When reading a namelist, we handily drop all the entries that we don't know about. Order in the server list is irrelevant, client's first is chosen
-parseServerNameListFiltered :: (a -> SshString) -> [a] -> NameList -> [a]
-parseServerNameListFiltered getName clientList serverList = filter ((`elem` (names serverList)) . getName) clientList
-
-getPacket :: (Get Packet) -> Get Packet
-getPacket kexInitHelper = do
+getPacket :: Get Packet
+getPacket = do
     msg <- getWord8
     case msg of
         1  -> do -- Disconnect
@@ -89,8 +100,15 @@ getPacket kexInitHelper = do
         6  -> do -- ServiceAccept
             s <- getString
             return $ ServiceAccept s
-        20 -> -- KEXInit
-            kexInitHelper
+        20 -> do -- KEXInit
+            c <- replicateM 16 getWord8
+            ka <- names `liftM` get
+            hka <- names `liftM` get
+            ecs <- names `liftM` get
+            esc <- names `liftM` get
+            mcs <- names `liftM` get
+            msc <- names `liftM` get
+            return $ KEXInit B.empty c ka hka ecs esc mcs msc -- We'll have to filter out the ones we don't know afterwards!
         21 -> return NewKeys
         31 -> do -- KEXDHReply
             k_S <- getString
