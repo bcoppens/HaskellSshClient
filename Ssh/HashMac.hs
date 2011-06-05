@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Ssh.HashMac (
       HashMac(..)
     , noHashMac
@@ -15,4 +17,4 @@ data HashMac = HashMac {
 instance Show HashMac where
     show = B.unpack . hashName
 
-noHashMac = HashMac (B.pack "none") id 0 -- for the initial KEX
+noHashMac = HashMac "none" id 0 -- for the initial KEX

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Ssh.KeyExchange.DiffieHellman (
       diffieHellmanGroup
     , dhGroup1
@@ -81,7 +83,7 @@ diffieHellmanGroup (DHGroup p g) clientKEXAlgos clientHostKeys clientCryptos ser
 
     let sharedSecret = dhComputeSharedSecret (dh_f dhReply) x p
         cvs = filterNewlines clientVersionString
-        serverVersion = B.pack "OpenSSH_5.1p1 Debian-5" -- ### TODO
+        serverVersion = "OpenSSH_5.1p1 Debian-5" -- ### TODO
         svs = filterNewlines serverVersion
         hostKey = dh_hostKeyAndCerts dhReply -- AND certs? ###
         exchangeHash = dhComputeExchangeHash {-hash-} cvs svs rawClientKexInit rawServerKexInit hostKey e (dh_f dhReply) sharedSecret
@@ -118,8 +120,8 @@ dhKexPutPacketHelper (KEXInit _ c ka hka ecs esc mcs msc) = do
     put $ NameList { names = ecs }
     put $ NameList { names = mcs }
     put $ NameList { names = msc }
-    put $ NameList { names = [B.pack "none"] } -- compression
-    put $ NameList { names = [B.pack "none"] } -- compression
+    put $ NameList { names = ["none"] } -- compression
+    put $ NameList { names = ["none"] } -- compression
     put $ NameList { names = [] }
     put $ NameList { names = [] }
     put $ (0 :: Word8) -- firstKexFollows

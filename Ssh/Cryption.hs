@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Ssh.Cryption (
       CryptionAlgorithm (..)
     , aesEncrypt
@@ -27,7 +29,7 @@ data CryptionAlgorithm = CryptionAlgorithm {
 instance Show CryptionAlgorithm where
     show = B.unpack . cryptoName
 
-noCrypto = CryptionAlgorithm (B.pack "none") (\_ -> id) (\_ -> id) 0 -- for the initial KEX
+noCrypto = CryptionAlgorithm "none" (\_ -> id) (\_ -> id) 0 -- for the initial KEX
 
 cbcDec :: [Word8] -> [Word8] -> [Word8]
 cbcDec x y = map (uncurry xor) $ zip x y

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 import Network
 import Data.Binary.Put
 import Data.Word
@@ -43,14 +45,14 @@ chunkUpString bpc s = chunkIt bytes []
                         where (chunk, todo)   = splitAt bpc b
                               new             = acc ++ [chunk] -- TODO
 
-clientCryptos = [ (CryptionAlgorithm (B.pack "aes256-cbc") (aesEncrypt 256) (aesDecrypt 256) 128) ]
+clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
 
-clientHashMacs = [ HashMac (B.pack "hmac-sha1") (error "OEPS") 0 ]
+clientHashMacs = [ HashMac "hmac-sha1" (error "OEPS") 0 ]
 
-rsaHostKey = HostKeyAlgorithm (B.pack "ssh-rsa")
+rsaHostKey = HostKeyAlgorithm "ssh-rsa"
 clientHostKeys = [rsaHostKey]
 
-dhGroup1KEXAlgo = KEXAlgorithm (B.pack "diffie-hellman-group1-sha1") (diffieHellmanGroup dhGroup1 {-sha1-} clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs) -- IEW RECURSIVE
+dhGroup1KEXAlgo = KEXAlgorithm "diffie-hellman-group1-sha1" (diffieHellmanGroup dhGroup1 {-sha1-} clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs) -- IEW RECURSIVE
 clientKEXAlgos = [dhGroup1KEXAlgo]
 
 doKex :: [KEXAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Socket -> (SshTransport -> Socket -> IO ServerPacket) -> IO ConnectionData
@@ -69,16 +71,16 @@ doKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs s
         rawClientKexInit = rawPacket clientKex
         rawServerKexInit = rawPacket serverKex
         makeTransportPacket = makeSshPacket initialTransport
-    connectiondata <- handleKex kexFn (B.pack clientVersionString) rawClientKexInit rawServerKexInit makeTransportPacket (getPacket initialTransport) s
+    connectiondata <- handleKex kexFn clientVersionString rawClientKexInit rawServerKexInit makeTransportPacket (getPacket initialTransport) s
     sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket NewKeys undefined
-    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket (ServiceRequest $ B.pack "ssh-wololooo") undefined
+    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket (ServiceRequest "ssh-wololooo") undefined
     putStrLn "KEX DONE?"
     return connectiondata
 
 
 getServerVersionString :: Socket -> IO String
 getServerVersionString s = do l <- sockReadLine s
-                              if B.pack "SSH-2.0" `B.isPrefixOf` l
+                              if "SSH-2.0" `B.isPrefixOf` l
                                 then return . B.unpack $ l
                                 else getServerVersionString s
 
@@ -97,7 +99,7 @@ main = do
     --hSetBuffering connection $ BlockBuffering Nothing
     serverVersion <- getServerVersionString connection
     debug serverVersion
-    sendAll connection $ B.pack clientVersionString
+    sendAll connection clientVersionString
     let dhMeh = dhKexInitGetHelper clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs -- TODO
     cd <- doKex clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection (sGetPacket dhMeh)
     --requestService (B.pack "ssh-userauth")
