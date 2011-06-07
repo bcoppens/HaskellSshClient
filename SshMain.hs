@@ -4,6 +4,7 @@ import Network
 import Data.Binary.Put
 import Data.Word
 import Control.Monad
+import qualified Control.Monad.State as MS
 import Data.List
 import Data.Maybe
 import qualified Data.ByteString.Lazy as B
@@ -47,7 +48,8 @@ chunkUpString bpc s = chunkIt bytes []
                         where (chunk, todo)   = splitAt bpc b
                               new             = acc ++ [chunk] -- TODO
 
-clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
+--clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
+clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (error "Later...") (error "Later...") 128) ]
 
 clientHashMacs = [ HashMac "hmac-sha1" (error "OEPS") 0 ]
 
@@ -79,7 +81,9 @@ main = do
     serverVersion <- getServerVersionString connection
     debug $ show serverVersion
     sendAll connection clientVersionString
-    cd <- doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket
+    -- TODO remove runState!
+    let tinfo = SshTransportInfo undefined (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+    cd <- MS.evalStateT (doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
     --requestService (B.pack "ssh-userauth")
     clientLoop connection undefined
     sClose connection

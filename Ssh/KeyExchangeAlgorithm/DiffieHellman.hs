@@ -66,18 +66,18 @@ filterNewlines :: SshString -> SshString
 filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r')) s -- Filter only the FINAL \r\n??? ###
 
 --TODO use hash
-diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> IO Packet) -> Socket -> IO ConnectionData
+diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
 diffieHellmanGroup (DHGroup p g) clientVersionString rawClientKexInit rawServerKexInit makeTransportPacket getPacket s = do
     let q = (p - 1) `div` 2 -- let's *assume* this is the order of the subgroup?
-    x <- randIntegerOneToNMinusOne q
+    x <- MS.liftIO $ randIntegerOneToNMinusOne q
     let e = modexp g x p
         dhInit = KEXDHInit e
-    putStrLn $ show dhInit
-    sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
+    MS.liftIO $ putStrLn $ show dhInit
+    MS.liftIO $ sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
     dhReply <- getPacket s
-    putStrLn $ show dhReply
+    MS.liftIO $ putStrLn $ show dhReply
     newKeys <- getPacket s
-    putStrLn $ show newKeys
+    MS.liftIO $ putStrLn $ show newKeys
 
     let sharedSecret = dhComputeSharedSecret (dh_f dhReply) x p
         cvs = filterNewlines clientVersionString
@@ -89,10 +89,10 @@ diffieHellmanGroup (DHGroup p g) clientVersionString rawClientKexInit rawServerK
         theMap = \c -> createKeyData sharedSecret exchangeHash c sId
         [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (theMap . convert) ['A' .. 'F']
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
-    putStrLn "A"
-    putStrLn $ show hostKey
-    putStrLn "B"
-    putStrLn $ show exchangeHash
+    MS.liftIO $ putStrLn "A"
+    MS.liftIO $ putStrLn $ show hostKey
+    MS.liftIO $ putStrLn "B"
+    MS.liftIO $ putStrLn $ show exchangeHash
     case newKeys of
         NewKeys -> return cd
         _       -> error "Expected NEWKEYS"

@@ -13,13 +13,14 @@ import Data.Word
 import Data.Digest.Pure.SHA
 
 import Ssh.Packet
+import Ssh.Transport
 import Ssh.ConnectionData
 
 type SshString = B.ByteString
 
 data KeyExchangeAlgorithm = KeyExchangeAlgorithm {
       kexName :: SshString
-    , handleKex :: SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> IO Packet) -> Socket -> IO ConnectionData
+    , handleKex :: SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
 }
 
 instance Show KeyExchangeAlgorithm where

@@ -1,5 +1,5 @@
 module Ssh.ConnectionData (
-    ConnectionData (..)
+      ConnectionData (..)
 ) where
 
 import Data.Word
@@ -14,4 +14,4 @@ data ConnectionData = ConnectionData {
     , server2ClientEncKey :: [Word8]
     , client2ServerIntKey :: [Word8]
     , server2ClientIntKey :: [Word8]
-}
+} deriving Show

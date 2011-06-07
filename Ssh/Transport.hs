@@ -2,10 +2,10 @@ module Ssh.Transport (
       SshTransport (..)
     , SshTransportInfo (..)
     , ConnectionData (..)
+    , SshConnection (..)
     , sGetPacket
     , makeSshPacket
     , getSizes
-    , getSmallBlock
 ) where
 
 import Control.Monad
@@ -21,7 +21,6 @@ import Data.Binary.Get
 import Data.Binary.Put
 
 import Ssh.Cryption
-import Ssh.KeyExchangeAlgorithm
 import Ssh.HashMac
 import Ssh.Packet
 import Ssh.HostKeyAlgorithm
@@ -37,8 +36,8 @@ data SshTransport = SshTransport {
 } deriving Show
 
 data SshTransportInfo = SshTransportInfo {
-      kex_alg :: KeyExchangeAlgorithm
-    , serverhost_key_alg :: HostKeyAlgorithm
+{-      kex_alg :: KeyExchangeAlgorithm
+    ,-} serverhost_key_alg :: HostKeyAlgorithm
 
     , client2server :: SshTransport
     , clientVector :: [Word8]
@@ -48,6 +47,8 @@ data SshTransportInfo = SshTransportInfo {
     , serverSeq :: Int32
     -- compression
     -- languages
+
+    , connectionData :: ConnectionData
 } deriving Show
 
 type SshConnection = MS.StateT SshTransportInfo IO
@@ -75,27 +76,54 @@ nullByte = toEnum $ fromEnum '\0'
 makeSshPacket :: SshTransport -> SshString -> SshString
 makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (paddingLength t $ fromEnum $ B.length payload) nullByte -- TODO make padding random
 
-sGetPacket :: SshTransport -> Socket -> IO ServerPacket
-sGetPacket t s = do
-    (packlen, padlen) <- getSizes s t
-    putStrLn $ show (packlen, padlen)
-    payload <- sockReadBytes s (packlen - padlen - 1) -- TODO decode as block
-    padding <- sockReadBytes s padlen
+sGetPacket :: SshTransport -> Socket -> SshConnection ServerPacket
+sGetPacket transport s = do
+    transportInfo <- MS.get
+    let smallSize = max 5 16 -- TODO We have to decode at least 5 bytes to read the sizes of this packet. We might need to decode more to take cipher size into account
+        getBlock size = MS.liftIO $ sockReadBytes s size
+        dec = decrypt $ crypto $ server2client transportInfo
+    firstBlock <- MS.liftIO $ getBlock smallSize
+    firstBytes <- decryptBytes dec $ B.unpack firstBlock
+    let (packlen, padlen) = getSizes firstBytes
+        nextBytes = B.pack $ drop 5 firstBytes
+    MS.liftIO $ putStrLn $ show (packlen, padlen)
+    restBytes <- getBlock (packlen - padlen - 1) -- TODO decode as block
+    padding <- getBlock padlen
     -- TODO verify MAC
-    let packet = (runGet getPacket payload) :: ServerPacket
+    let payload = B.append nextBytes restBytes
+        packet = (runGet getPacket payload) :: ServerPacket
     return $ annotatePacketWithPayload packet payload
 
-getSmallBlock :: Socket -> SshTransport -> Int -> IO SshString
-getSmallBlock s _ size = sockReadBytes s size -- TODO stuff with decoding blocks and all that
-
 -- We decode the initial block
-getSizes :: Socket -> SshTransport -> IO (Int, Int) -- (packetlen, transportlen)
-getSizes h t = do
-    sb <- getSmallBlock h t 5
-    return $ runGet getSizes' sb
+getSizes :: [Word8] -> (Int, Int) -- (packetlen, transportlen)
+getSizes block = runGet getSizes' $ B.pack block
 
 getSizes' :: Get (Int, Int)
 getSizes' = do
     packl <- getWord32
     padl  <- getWord8
     return (fromEnum packl, fromEnum padl)
+
+{-
+encryptBytes :: [Word8] -> [Word8] -> SshConnection [Word8]
+encryptBytes key s = do
+    transport <- MS.get
+    let c2s = client2server transport
+        v = clientVector transport
+        crypt = encrypt $ crypto c2s
+        encrypted = crypt key $ cbcEnc v s
+    MS.put $ transport { clientVector = encrypted }
+    return encrypted
+-}
+
+decryptBytes :: CryptoFunction -> [Word8] -> SshConnection [Word8]
+decryptBytes c s = do
+    transportInfo <- MS.get
+    let s2c = server2client transportInfo
+        v = serverVector transportInfo
+        crypt = decrypt $ crypto s2c
+        key = server2ClientEncKey $ connectionData transportInfo
+        (decrypted, newState) = MS.runState (crypt key s) $ CryptionInfo v
+    MS.put $ transportInfo { serverVector = stateVector newState }
+    return decrypted
+

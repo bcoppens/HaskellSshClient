@@ -50,17 +50,18 @@ filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHa
         mcs' = serverListFiltered (map hashName clientHashMacs) mcs
         msc' = serverListFiltered (map hashName serverHashMacs) msc
 
-doKex :: SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Socket -> (SshTransport -> Socket -> IO ServerPacket) -> IO ConnectionData
+doKex :: SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Socket -> (SshTransport -> Socket -> SshConnection ServerPacket) -> SshConnection ConnectionData
 doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs s getPacket = do
     --cookie <- fmap (fromInteger . toInteger) $ replicateM 16 $ (randomRIO (0, 255 :: Int)) :: IO [Word8]
     let cookie = replicate 16 (-1 :: Word8) -- TODO random
     let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
     let initialTransport = SshTransport noCrypto noHashMac
-    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket clientKex -- TODO make configurable
-    putStrLn "Mu"
+    MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
+    MS.liftIO $ sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket clientKex -- TODO make configurable
+    MS.liftIO $ putStrLn "Mu"
     serverKex <- getPacket initialTransport s
-    putStrLn "ServerKEX before filtering:"
-    putStrLn $ show serverKex
+    MS.liftIO $ putStrLn "ServerKEX before filtering:"
+    MS.liftIO $ putStrLn $ show serverKex
     -- assert KEXInit packet
     let filteredServerKex = filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs serverKex
         kex   = head $ kex_algos filteredServerKex
@@ -68,10 +69,10 @@ doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryp
         rawClientKexInit = rawPacket clientKex
         rawServerKexInit = rawPacket serverKex
         makeTransportPacket = makeSshPacket initialTransport
-    putStrLn "ServerKEX after filtering:"
-    putStrLn $ show filteredServerKex
+    MS.liftIO $ putStrLn "ServerKEX after filtering:"
+    MS.liftIO $ putStrLn $ show filteredServerKex
     connectiondata <- handleKex kexFn clientVersionString rawClientKexInit rawServerKexInit makeTransportPacket (getPacket initialTransport) s
-    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket NewKeys
-    sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket (ServiceRequest "ssh-wololooo")
-    putStrLn "KEX DONE?"
+    MS.liftIO $ sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket NewKeys
+    MS.liftIO $ sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket (ServiceRequest "ssh-wololooo")
+    MS.liftIO $ putStrLn "KEX DONE?"
     return connectiondata

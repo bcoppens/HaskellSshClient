@@ -2,6 +2,9 @@
 
 module Ssh.Cryption (
       CryptionAlgorithm (..)
+    , CryptionState (..)
+    , CryptionInfo (..)
+    , CryptoFunction
     , aesEncrypt
     , aesDecrypt
     , noCrypto
@@ -16,48 +19,37 @@ import qualified Data.ByteString.Lazy as B
 import qualified Codec.Encryption.AES as AES
 import Codec.Utils
 import Data.LargeWord
+import Control.Monad.State
 
 type SshString = B.ByteString
 
+data CryptionInfo = CryptionInfo {
+    stateVector :: [Word8]
+}
+
+type CryptionState = State CryptionInfo
+
+type CryptoFunction = [Word8] -> [Word8] -> CryptionState [Word8]
+
 data CryptionAlgorithm = CryptionAlgorithm {
       cryptoName :: SshString
-    , encrypt :: [Word8] -> [Word8] -> [Word8] -- encrypt: key -> plaintext -> result
-    , decrypt :: [Word8] -> [Word8] -> [Word8] -- encrypt: key -> ciphertext -> result
+    , encrypt :: CryptoFunction -- encrypt: key -> plaintext -> result
+    , decrypt :: CryptoFunction -- encrypt: key -> ciphertext -> result
     , blockSize :: Int -- can be 0 for stream ciphers
 }
 
 instance Show CryptionAlgorithm where
     show = show . cryptoName
 
-noCrypto = CryptionAlgorithm "none" (\_ -> id) (\_ -> id) 0 -- for the initial KEX
+noCrypto = CryptionAlgorithm "none" noop noop 0 -- for the initial KEX
+
+noop :: CryptoFunction
+noop _ t = return t
 
 cbcDec :: [Word8] -> [Word8] -> [Word8]
 cbcDec x y = map (uncurry xor) $ zip x y
 
 cbcEnc = cbcDec
-
-{-
-encryptBytes :: [Word8] -> [Word8] -> SshConnection [Word8]
-encryptBytes key s = do
-    transport <- MS.get
-    let c2s = client2server transport
-        v = clientVector transport
-        crypt = encrypt $ crypto c2s
-        encrypted = crypt key $ cbcEnc v s
-    MS.put $ transport { clientVector = encrypted }
-    return encrypted
-
-decryptBytes :: [Word8] -> [Word8] -> SshConnection [Word8]
-decryptBytes key s = do
-    transport <- MS.get
-    let s2c = server2client transport
-        v = serverVector transport
-        crypt = decrypt $ crypto s2c
-        decrypted = crypt key s
-    MS.put $ transport { serverVector = s }
-    return $ cbcDec v decrypted
--}
-
 
 convertString bs = toEnum . fromIntegral . (fromOctets 256)
 --reconvertString s = B.pack $ map (toEnum . fromEnum) $ toOctets 256 s
@@ -70,3 +62,4 @@ aesEncrypt 256 key plain =
 aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesDecrypt 256 key enc =
     reconvertString $ AES.decrypt (convertString 32 key :: Word256) (convertString 32 enc :: Word128)
+
