@@ -79,23 +79,29 @@ makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (padding
 sGetPacket :: SshTransport -> Socket -> SshConnection ServerPacket
 sGetPacket transport s = do
     transportInfo <- MS.get
-    let smallSize = max 5 16 -- TODO We have to decode at least 5 bytes to read the sizes of this packet. We might need to decode more to take cipher size into account
-        getBlock size = MS.liftIO $ sockReadBytes s size
+    let bs = blockSize $ crypto $ server2client transportInfo
+        smallSize = max 5 bs -- We have to decode at least 5 bytes to read the sizes of this packet. We might need to decode more to take cipher size into account
+        getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes s size
         dec = decrypt $ crypto $ server2client transportInfo
-    firstBlock <- MS.liftIO $ getBlock smallSize
-    firstBytes <- decryptBytes dec $ B.unpack firstBlock
+    firstBlock <- getBlock smallSize
+    firstBytes <- decryptBytes dec firstBlock
     let (packlen, padlen) = getSizes firstBytes
         nextBytes = B.pack $ drop 5 firstBytes
     MS.liftIO $ putStrLn $ show (packlen, padlen)
-    restBytes <- getBlock (packlen - padlen - 1) -- TODO decode as block
-    padding <- getBlock padlen
+    let payloadRestSize = packlen - padlen - 1 - (smallSize - 5) -- -1 because we already read the padlen field.
+        packetRestSize = payloadRestSize + padlen
+    restBytes <- getBlock packetRestSize
+    let packetBytes = take payloadRestSize restBytes
+    restBytesDecrypted <- decryptBytes dec $ packetBytes
     -- TODO verify MAC
-    let payload = B.append nextBytes restBytes
+    let payload = B.append nextBytes $ B.pack restBytesDecrypted
         packet = (runGet getPacket payload) :: ServerPacket
     return $ annotatePacketWithPayload packet payload
 
 -- We decode the initial block
-getSizes :: [Word8] -> (Int, Int) -- (packetlen, transportlen)
+-- Packet Length is the lenght of the (encrypted, no mac added) packet, WITHOUT the packet_length field, WITH padding_length field!
+-- This means that the length of the payload == packetlen - padlen - 1
+getSizes :: [Word8] -> (Int, Int) -- (packetlen, padlen)
 getSizes block = runGet getSizes' $ B.pack block
 
 getSizes' :: Get (Int, Int)

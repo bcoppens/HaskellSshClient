@@ -115,7 +115,7 @@ getPacket = do
             f <- getMPInt
             h_sig <- getString
             return $ KEXDHReply k_S f h_sig
-        _ -> error $ "unhandled getPacket, msg was " -- ++ show msg
+        _ -> error $ "unhandled getPacket, msg was " ++ show msg
 
 {-
 instance Binary Packet where
