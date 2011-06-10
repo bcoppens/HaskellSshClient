@@ -84,7 +84,9 @@ sGetPacket transport s = do
         getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes s size
         dec = decrypt $ crypto $ server2client transportInfo
     firstBlock <- getBlock smallSize
+    MS.liftIO $ putStrLn $ show firstBlock
     firstBytes <- decryptBytes dec firstBlock
+    MS.liftIO $ putStrLn $ show firstBytes
     let (packlen, padlen) = getSizes firstBytes
         nextBytes = B.pack $ drop 5 firstBytes
     MS.liftIO $ putStrLn $ show (packlen, padlen)

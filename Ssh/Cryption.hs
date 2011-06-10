@@ -6,7 +6,7 @@ module Ssh.Cryption (
     , CryptionInfo (..)
     , CryptoFunction
     , aesEncrypt
-    , aesDecrypt
+    , cbcAesDecrypt
     , noCrypto
 )
 
@@ -38,6 +38,13 @@ data CryptionAlgorithm = CryptionAlgorithm {
     , blockSize :: Int -- can be 0 for stream ciphers
 }
 
+cbcAesDecrypt :: Int -> CryptoFunction
+cbcAesDecrypt ks key enc = do
+    state <- stateVector `liftM` get
+    let plain = aesDecrypt ks key enc
+    put $ CryptionInfo plain
+    return plain
+
 instance Show CryptionAlgorithm where
     show = show . cryptoName
 
@@ -51,15 +58,17 @@ cbcDec x y = map (uncurry xor) $ zip x y
 
 cbcEnc = cbcDec
 
-convertString bs = toEnum . fromIntegral . (fromOctets 256)
+-- DAMN THIS IS FUGLY!!!! ### TODO FIXME
+convertString1 = fromInteger . fromOctets 256
+convertString = fromInteger . fromOctets 256
 --reconvertString s = B.pack $ map (toEnum . fromEnum) $ toOctets 256 s
 reconvertString s = toOctets 256 s
 
 aesEncrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesEncrypt 256 key plain =
-    reconvertString $ AES.encrypt (convertString 32 key :: Word256) (convertString 32 plain :: Word128)
+    reconvertString $ AES.encrypt (convertString1 key :: Word256) (convertString plain :: Word128)
 
 aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesDecrypt 256 key enc =
-    reconvertString $ AES.decrypt (convertString 32 key :: Word256) (convertString 32 enc :: Word128)
+    reconvertString $ AES.decrypt (convertString1 key :: Word256) (convertString enc :: Word128)
 

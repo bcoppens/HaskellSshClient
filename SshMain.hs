@@ -49,7 +49,7 @@ chunkUpString bpc s = chunkIt bytes []
                               new             = acc ++ [chunk] -- TODO
 
 --clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
-clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (error "Later...") (error "Later...") 128) ]
+clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (error "Later...") (cbcAesDecrypt 256) 16) ]
 
 clientHashMacs = [ HashMac "hmac-sha1" (error "OEPS") 0 ]
 
@@ -70,8 +70,17 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 
 --computeEncryptionInfo :: HashFunction -> String -> String
 
-clientLoop :: Socket -> SshTransport -> IO ()
-clientLoop = error "clientloop"
+clientLoop :: Socket -> ConnectionData -> SshConnection ()
+clientLoop socket cd = do
+    ti <- MS.get
+    MS.liftIO $ sendAll socket $ makeSshPacket (client2server ti) $ runPut $ putPacket (ServiceRequest "ssh-wololooo")
+    let s2ct = server2client ti
+    MS.liftIO $ putStrLn "Alo"
+    packet <- sGetPacket s2ct socket
+    MS.liftIO $ putStrLn $ show packet
+    error "End of Client Loop"
+    --clientLoop s cd
+
 
 
 main :: IO ()
@@ -82,10 +91,10 @@ main = do
     debug $ show serverVersion
     sendAll connection clientVersionString
     -- TODO remove runState!
-    let tinfo = SshTransportInfo undefined (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
-    cd <- MS.evalStateT (doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
+    let tinfo = SshTransportInfo (error "HKA") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+    (cd, newState) <- MS.runStateT (doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
     --requestService (B.pack "ssh-userauth")
-    clientLoop connection undefined
+    MS.runStateT (clientLoop connection cd) newState
     sClose connection
     where
       -- Higher-level connect function
