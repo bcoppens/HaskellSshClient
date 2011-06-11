@@ -1,9 +1,10 @@
+{-# LANGUAGE CPP #-}
+
 module Ssh.Debug (
       debugRawStringData
     , logTraceMessage
     , logTraceMessageShow
     , logTraceMessageAndShow
-    , setLogLevel
     , LogLevel(..)
 ) where
 
@@ -11,8 +12,6 @@ import Numeric
 import Data.Char
 import Data.List
 import Debug.Trace
-import Control.Concurrent
-import System.IO.Unsafe
 
 import qualified Data.ByteString.Lazy as B
 type SshString = B.ByteString
@@ -22,10 +21,11 @@ data LogLevel =
     | LogWarning
     deriving Show
 
-debugLevel = unsafePerformIO $ newMVar LogDebug
-
-setLogLevel :: LogLevel -> IO LogLevel
-setLogLevel ll = modifyMVar debugLevel $ \l -> return (ll,l)
+#ifdef DEBUG
+debugLevel = LogDebug
+#else
+debugLevel = LogWarning
+#endif
 
 -- logLevelRequired, currentLogLevel
 printLogMessage :: LogLevel -> LogLevel -> String -> b -> b
@@ -34,11 +34,7 @@ printLogMessage LogWarning LogWarning a b = trace a b
 printLogMessage _          _          _ b = b
 
 logTraceMessage' :: LogLevel -> String -> a -> a
-logTraceMessage' l s a = unsafePerformIO $ do
-    ll <- takeMVar debugLevel
-    let a' = printLogMessage l ll s a
-    putMVar debugLevel ll
-    return a'
+logTraceMessage' l s a = printLogMessage l debugLevel s a
 
 logTraceMessageShow :: (Show a) => LogLevel -> a -> b -> b
 logTraceMessageShow ll a b = logTraceMessage' ll (show a) b
