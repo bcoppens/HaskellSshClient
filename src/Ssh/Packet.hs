@@ -26,6 +26,9 @@ data Packet =
     , disc_description :: SshString
     , disc_language :: SshString
     }
+   | Ignore { -- 2
+     ignoreData :: SshString
+   }
    | ServiceRequest { -- 5
       serviceReqName :: SshString
    }
@@ -97,6 +100,9 @@ getPacket = do
             desc <- getString
             lang <- getString
             return $ Disconnect r desc lang
+        2 -> do -- Ignore
+            s <-getString
+            return $ Ignore s
         6  -> do -- ServiceAccept
             s <- getString
             return $ ServiceAccept s
