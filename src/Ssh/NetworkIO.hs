@@ -112,15 +112,16 @@ putMPInt :: Integer -> Put
 putMPInt i | i < 0  = error "OEPS NOT IMPLEMENTED: putMPInt i < 0"
            | i == 0 = putWord32 0
 putMPInt i = do
-    let rawList = makeOk $ reverse $ deconstructInteger i []
+    let rawList = makeOk $ deconstructInteger i []
     putWord32 $ toEnum $ fromEnum $ length rawList
     forM_ rawList put
-    where
-        deconstructInteger :: Integer -> [Word8] -> [Word8]
-        deconstructInteger i x | i /= 0  = deconstructInteger (i `shiftR` 8) $ (fromIntegral $ i .&. 0xff):x
-                               | i == 0  = x
-        makeOk rawList | testBit (head rawList) 7 == True = 0:rawList -- head won't fail since i > 0
-                       | otherwise                        = rawList
+
+deconstructInteger :: Integer -> [Word8] -> [Word8]
+deconstructInteger i x | i /= 0  = deconstructInteger (i `shiftR` 8) $ (fromIntegral $ i .&. 0xff):x
+                       | i == 0  = x
+
+makeOk rawList | testBit (head rawList) 7 == True = 0:rawList -- head won't fail since i > 0
+               | otherwise                        = rawList
 
 getString :: Get SshString
 getString = do
