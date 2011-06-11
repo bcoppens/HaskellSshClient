@@ -70,5 +70,5 @@ aesEncrypt 256 key plain =
 
 aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesDecrypt 256 key enc =
-    reconvertString $ AES.decrypt (convertString1 key :: Word256) (convertString enc :: Word128)
+    reconvertString $ AES.decrypt (convertString1 (take 32 key) :: Word256) (convertString enc :: Word128)
 

@@ -92,7 +92,7 @@ main = do
     sendAll connection clientVersionString
     -- TODO remove runState!
     let tinfo = SshTransportInfo (error "HKA") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
-    (cd, newState) <- MS.runStateT (doKex clientVersionString clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
+    (cd, newState) <- MS.runStateT (doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
     --requestService (B.pack "ssh-userauth")
     MS.runStateT (clientLoop connection cd) newState
     sClose connection
