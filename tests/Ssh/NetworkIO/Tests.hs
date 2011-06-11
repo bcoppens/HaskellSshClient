@@ -12,6 +12,8 @@ import Data.Binary.Put
 
 import qualified Data.ByteString.Lazy as B
 
+import Debug.Trace
+
 import Ssh.NetworkIO
 
 type SshString = B.ByteString
@@ -19,14 +21,21 @@ type SshString = B.ByteString
 loadString s = B.pack $ map (toEnum . fromEnum) s
 
 checkMPIntPut :: ([Int], Integer) -> H.Assertion -- Int instead of Word8...
-checkMPIntPut (bytes,shouldBe) = do
-    let value = runPut $ putMPInt shouldBe
-    H.assert $ value == loadString bytes
+checkMPIntPut (bytes,mpint) = do
+    let value      = runPut $ putMPInt mpint
+        cmp        = loadString bytes
+        result     = value == cmp
+        --result'    = trace ( "Put: " ++ show result ++ ": Computed: " ++ (show $ B.unpack value) ++ " =?= Should be: " ++ (show $ B.unpack cmp)) result
+        result' = result
+    H.assert $ result'
 
 checkMPIntGet :: ([Int], Integer) -> H.Assertion -- Int instead of Word8...
-checkMPIntGet (bytes,shouldBe) = do
-    let value = runGet getMPInt $ loadString bytes
-    H.assert $ value == shouldBe
+checkMPIntGet (bytes,mpint) = do
+    let value   = runGet getMPInt $ loadString bytes
+        result  = value == mpint
+        --result' = trace ( "Get: " ++ show result ++ ": Computed: " ++ (show value) ++ " =?= Should be: " ++ (show mpint)) result
+        result' = result
+    H.assert $ result'
 
 mpIntTestValues =
     [
