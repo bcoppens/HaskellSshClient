@@ -75,8 +75,13 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload makeTransportPacket (getPacket initialTransport) s
     MS.liftIO $ sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket NewKeys
     let s2c    = head $ enc_s2c filteredServerKex
-        s2cfun = fromJust $ find (\x -> cryptoName x == s2c) clientCryptos
-    MS.modify $ \s -> s { server2client = SshTransport s2cfun noHashMac, connectionData = connectiondata }
+        s2cfun = fromJust $ find (\x -> cryptoName x == s2c) serverCryptos
+        s2cmac = head $ mac_s2c filteredServerKex
+        s2cmacfun = fromJust $ find (\x -> hashName x == s2cmac) serverHashMacs
+    MS.modify $ \s -> s { server2client = SshTransport s2cfun s2cmacfun,
+                          serverVector = server2ClientIV connectiondata,
+                          connectionData = connectiondata
+                         }
     --server2client :: SshTransport
     --, serverVector :: [Word8]
     MS.liftIO $ putStrLn "KEX DONE?"
