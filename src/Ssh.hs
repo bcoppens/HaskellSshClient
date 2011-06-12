@@ -51,7 +51,7 @@ chunkUpString bpc s = chunkIt bytes []
 --clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
 clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (error "Later...") (cbcAesDecrypt 256) 16) ]
 
-clientHashMacs = [ HashMac "hmac-sha1" (error "OEPS") 20 ]
+clientHashMacs = [ sha1HashMac ]
 
 rsaHostKey = HostKeyAlgorithm "ssh-rsa"
 clientHostKeys = [rsaHostKey]
