@@ -76,9 +76,13 @@ clientLoop socket cd = do
     MS.liftIO $ sendAll socket $ makeSshPacket (client2server ti) $ runPut $ putPacket (ServiceRequest "ssh-wololooo")
     let s2ct = server2client ti
     MS.liftIO $ putStrLn "Alo"
-    packet <- sGetPacket s2ct socket
-    MS.liftIO $ putStrLn $ show packet
-    error "End of Client Loop"
+    loop s2ct
+        where
+            loop s2ct = do
+                packet <- sGetPacket s2ct socket
+                MS.liftIO $ putStrLn $ show packet
+                loop s2ct
+    -- error "End of Client Loop"
     --clientLoop s cd
 
 
