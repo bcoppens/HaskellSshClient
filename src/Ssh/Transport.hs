@@ -69,14 +69,21 @@ makeSshPacket' t payload padding = runPut $ do
     --put $ (docrypt . crypto) t $ noMac
     --put $ (hashFunction . mac) t $ noMac
 
-{- multiple of max (8, cipherblocksize), and 4 <= len <= 255 -}
+{- Pad with len pad bytes so that size of |packetlen|padlen|payload|padding| is multiple of max (8, cipherblocksize), and 4 <= len <= 255 -}
+-- TODO: randomize?
 paddingLength :: SshTransport -> Int -> Int
-paddingLength t packLen = 8 + (-packLen - 5) `mod` (max 8 (blockSize $ crypto t)) -- TODO 8+ ...
+paddingLength t packLen | minPadding < 4  = 4 + paddingLength t (packLen + 4)
+                        | otherwise       = minPadding
+    where minPadding = multipleOf - ((packLen + 5) `mod` multipleOf)
+          bs         = blockSize $ crypto t
+          multipleOf = max 8 bs
 
 nullByte = toEnum $ fromEnum '\0'
 
 makeSshPacket :: SshTransport -> SshString -> SshString
-makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (paddingLength t $ fromEnum $ B.length payload) nullByte -- TODO make padding random
+makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate padLen nullByte -- TODO make padding random
+    where
+        padLen = (paddingLength t $ fromEnum $ B.length payload)
 
 sPutPacket :: SshTransport -> Socket -> ClientPacket -> SshConnection ()
 sPutPacket transport socket packet = do
