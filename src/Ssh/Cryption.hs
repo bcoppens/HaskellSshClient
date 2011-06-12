@@ -19,6 +19,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Codec.Encryption.AES as AES
 import Codec.Utils
 import Data.LargeWord
+import Data.List.Split
 import Control.Monad
 import Control.Monad.State
 
@@ -41,17 +42,10 @@ data CryptionAlgorithm = CryptionAlgorithm {
     , blockSize :: Int -- can be 0 for stream ciphers
 }
 
-splitInGroupsOf :: Int -> [a] -> [[a]]
-splitInGroupsOf s a = sp a 0 []
-    where sp []       _ acc = [acc]
-          sp t@(x:xs) i acc | i == s    = acc : (sp t 0 [])
-                            | otherwise = sp xs (i+1) (acc ++ [x])
-
-
 cbcAesDecrypt :: Int -> CryptoFunction
 cbcAesDecrypt ks key enc = do
     -- Decode in chunks of 128 bits
-    let chunks = splitInGroupsOf 16 enc
+    let chunks = splitEvery 16 enc
     cbcAesDecryptLoop ks key chunks []
 
 

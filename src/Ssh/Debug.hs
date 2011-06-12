@@ -11,6 +11,7 @@ module Ssh.Debug (
 import Numeric
 import Data.Char
 import Data.List
+import Data.List.Split
 import Debug.Trace
 
 import qualified Data.ByteString.Lazy as B
@@ -44,15 +45,9 @@ logTraceMessage ll s a = logTraceMessage' ll s a
 
 logTraceMessageAndShow l a b = logTraceMessageAndShow l (a ++ show b) b
 
-splitInGroupsOf :: Int -> [a] -> [[a]]
-splitInGroupsOf s a = sp a 0 []
-    where sp []       _ acc = [acc]
-          sp t@(x:xs) i acc | i == s    = acc : (sp t 0 [])
-                            | otherwise = sp xs (i+1) (acc ++ [x])
-
 convertToHexString []     = []
 convertToHexString (c:cs) | c < 16    = "0" ++ (showIntAtBase 16 intToDigit c "") ++ convertToHexString cs
                           | otherwise = (showIntAtBase 16 intToDigit c "") ++ convertToHexString cs
 
 -- | Convert a string to a format similar to OpenSSH's dumping of buffers
-debugRawStringData s = concat . concat . map ((++ ["\n"]) . intersperse " ") $ splitInGroupsOf 8 $ splitInGroupsOf 4 $ convertToHexString $ B.unpack s
+debugRawStringData s = concat . concat . map ((++ ["\n"]) . intersperse " ") $ splitEvery 8 $ splitEvery 4 $ convertToHexString $ B.unpack s
