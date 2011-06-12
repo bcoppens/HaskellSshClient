@@ -88,10 +88,6 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
         [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (take 128 . theMap . convert) ['A' .. 'F'] -- TODO take 128 -> the right value!
         -- TODO the session_id from the FIRST kex should remain the session_id for all future
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
-    MS.liftIO $ putStrLn "A"
-    MS.liftIO $ putStrLn $ show hostKey
-    MS.liftIO $ putStrLn "B"
-    MS.liftIO $ putStrLn $ show exchangeHash
     case newKeys of
         NewKeys -> return cd
         _       -> error "Expected NEWKEYS"
