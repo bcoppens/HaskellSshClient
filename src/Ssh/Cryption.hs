@@ -61,7 +61,7 @@ cbcAesDecryptLoop ks key (enc:encs) acc = do
     state <- stateVector `liftM` get
     let dec   = aesDecrypt ks key enc
         plain = cbcDec dec state
-    put $ CryptionInfo plain
+    put $ CryptionInfo enc
     cbcAesDecryptLoop ks key encs (acc++plain)
 
 instance Show CryptionAlgorithm where
