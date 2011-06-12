@@ -38,9 +38,9 @@ data SshTransport = SshTransport {
 
 data SshTransportInfo = SshTransportInfo {
 {-      kex_alg :: KeyExchangeAlgorithm
-    ,-} serverhost_key_alg :: HostKeyAlgorithm
+    , serverhost_key_alg :: HostKeyAlgorithm
 
-    , client2server :: SshTransport
+    ,-} client2server :: SshTransport
     , clientVector :: [Word8]
     , clientSeq :: Int32
     , server2client :: SshTransport
