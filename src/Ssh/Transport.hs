@@ -84,6 +84,11 @@ sGetPacket transport s = do
         smallSize = max 5 bs -- We have to decode at least 5 bytes to read the sizes of this packet. We might need to decode more to take cipher size into account
         getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes s size
         dec = decrypt $ crypto $ server2client transportInfo
+        hmac = mac $ server2client transportInfo
+        macLen = hashSize hmac
+        macKeySize = hashKeySize hmac
+        macKey = take macKeySize $ server2ClientIntKey $ connectionData transportInfo
+        macFun = hashFunction $ mac $ server2client transportInfo
     firstBlock <- getBlock smallSize
     firstBytes <- decryptBytes dec firstBlock
     let (packlen, padlen) = getSizes firstBytes
@@ -93,13 +98,16 @@ sGetPacket transport s = do
         packetRestSize = payloadRestSize + padlen
     restBytes <- getBlock packetRestSize
     restBytesDecrypted <- decryptBytes dec $ restBytes
-    let restPacketBytes = take payloadRestSize restBytesDecrypted
-        macLen = hashSize $ mac $ server2client transportInfo
     macBytes <- getBlock macLen
-    MS.liftIO $ putStrLn $ "Got " ++ show macLen ++ " bytes of mac " ++ (debugRawStringData $ B.pack macBytes)
-    -- TODO verify MAC
+    let restPacketBytes = take payloadRestSize restBytesDecrypted
+        sseq = runPut $ putWord32 $ (toEnum . fromEnum) $ serverSeq transportInfo
+        toMacBytes = (B.unpack sseq) ++ firstBytes ++ restBytesDecrypted -- includes length fields and padding as well
+        computedMac = macFun macKey toMacBytes
+        macOK = macBytes == computedMac
+    MS.liftIO $ putStrLn $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
     let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
+    MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
     return $ annotatePacketWithPayload packet payload
 
 -- We decode the initial block
