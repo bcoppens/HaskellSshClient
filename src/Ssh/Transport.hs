@@ -26,6 +26,7 @@ import Ssh.Packet
 import Ssh.HostKeyAlgorithm
 import Ssh.NetworkIO
 import Ssh.ConnectionData
+import Ssh.Debug
 
 type SshString = B.ByteString
 
@@ -84,19 +85,17 @@ sGetPacket transport s = do
         getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes s size
         dec = decrypt $ crypto $ server2client transportInfo
     firstBlock <- getBlock smallSize
-    MS.liftIO $ putStrLn $ show $ B.pack firstBlock
     firstBytes <- decryptBytes dec firstBlock
-    MS.liftIO $ putStrLn $ show $ B.pack firstBytes
     let (packlen, padlen) = getSizes firstBytes
         nextBytes = B.pack $ drop 5 firstBytes
     MS.liftIO $ putStrLn $ show (packlen, padlen)
     let payloadRestSize = packlen - padlen - 1 - (smallSize - 5) -- -1 because we already read the padlen field.
         packetRestSize = payloadRestSize + padlen
     restBytes <- getBlock packetRestSize
-    let packetBytes = take payloadRestSize restBytes
-    restBytesDecrypted <- decryptBytes dec $ packetBytes
+    restBytesDecrypted <- decryptBytes dec $ restBytes
+    let restPacketBytes = take payloadRestSize restBytesDecrypted
     -- TODO verify MAC
-    let payload = B.append nextBytes $ B.pack restBytesDecrypted
+    let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
     return $ annotatePacketWithPayload packet payload
 
