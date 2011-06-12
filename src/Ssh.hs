@@ -49,7 +49,7 @@ chunkUpString bpc s = chunkIt bytes []
                               new             = acc ++ [chunk] -- TODO
 
 --clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
-clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (error "Later...") (cbcAesDecrypt 256) 16) ]
+clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (cbcAesEncrypt 256) (cbcAesDecrypt 256) 16) ]
 
 clientHashMacs = [ sha1HashMac ]
 
@@ -73,7 +73,7 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 clientLoop :: Socket -> ConnectionData -> SshConnection ()
 clientLoop socket cd = do
     ti <- MS.get
-    MS.liftIO $ sendAll socket $ makeSshPacket (client2server ti) $ runPut $ putPacket (ServiceRequest "ssh-wololooo")
+    sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
     let s2ct = server2client ti
     MS.liftIO $ putStrLn "Alo"
     loop s2ct

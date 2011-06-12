@@ -20,7 +20,7 @@ type SshString = B.ByteString
 
 data KeyExchangeAlgorithm = KeyExchangeAlgorithm {
       kexName :: SshString
-    , handleKex :: SshString -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
+    , handleKex :: SshString -> SshString -> SshString -> SshString -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
 }
 
 instance Show KeyExchangeAlgorithm where

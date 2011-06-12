@@ -65,14 +65,16 @@ filterNewlines :: SshString -> SshString
 filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r')) s -- Filter only the FINAL \r\n??? ###
 
 --TODO use hash
-diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> SshString -> (SshString -> SshString) -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
-diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit rawServerKexInit makeTransportPacket getPacket s = do
+diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> SshString -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
+diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit rawServerKexInit getPacket s = do
+    transportInfo <- MS.get
     let q = (p - 1) `div` 2 -- let's *assume* this is the order of the subgroup?
     x <- MS.liftIO $ randIntegerOneToNMinusOne q
     let e = modexp g x p
         dhInit = KEXDHInit e
     MS.liftIO $ putStrLn $ show dhInit
-    MS.liftIO $ sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
+    --MS.liftIO $ sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
+    sPutPacket (client2server transportInfo) s dhInit
     dhReply <- getPacket s
     MS.liftIO $ putStrLn $ show dhReply
     newKeys <- getPacket s
@@ -88,6 +90,7 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
         [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (take 128 . theMap . convert) ['A' .. 'F'] -- TODO take 128 -> the right value!
         -- TODO the session_id from the FIRST kex should remain the session_id for all future
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
+    MS.liftIO $ putStrLn $ "SS: \n" ++ debugRawStringData sharedSecret
     case newKeys of
         NewKeys -> return cd
         _       -> error "Expected NEWKEYS"

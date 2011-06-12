@@ -4,6 +4,7 @@ module Ssh.NetworkIO (
       NameList(..)
     , sockReadLine
     , sockReadBytes
+    , sockWriteBytes
     , encodeAsWord32
     , encodeAsWord8
     , putRawByteString
@@ -58,6 +59,8 @@ sockReadLine' socket string = do
 sockReadLine :: Socket -> IO B.ByteString
 sockReadLine s = sockReadLine' s mempty
 
+sockWriteBytes :: Socket -> B.ByteString -> IO ()
+sockWriteBytes = sendAll
 
 encodeAsWord32 i = fromInteger $ toInteger i :: Word32
 encodeAsWord8 i = fromInteger $ toInteger i :: Word8

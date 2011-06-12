@@ -56,10 +56,9 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     let cookie = replicate 16 (-1 :: Word8) -- TODO random
     let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
     let initialTransport     = SshTransport noCrypto noHashMac
-        clientKexInitPayload = runPut $ putPacket clientKex
-        clientKexPacket      = makeSshPacket initialTransport clientKexInitPayload
+        clientKexInitPayload = makeSshPacket initialTransport $ runPut $ putPacket clientKex
     MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
-    MS.liftIO $ sendAll s clientKexPacket
+    sPutPacket initialTransport s clientKex
     MS.liftIO $ putStrLn "Mu"
     serverKex <- getPacket initialTransport s
     MS.liftIO $ putStrLn "ServerKEX before filtering:"
@@ -69,17 +68,22 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
         kex   = head $ kex_algos filteredServerKex
         kexFn = fromJust $ find (\x -> kexName x == kex) clientKEXAlgos
         serverKexInitPayload = rawPacket serverKex
-        makeTransportPacket = makeSshPacket initialTransport
     MS.liftIO $ putStrLn "ServerKEX after filtering:"
     MS.liftIO $ putStrLn $ show filteredServerKex
-    connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload makeTransportPacket (getPacket initialTransport) s
-    MS.liftIO $ sendAll s $ makeSshPacket initialTransport $ runPut $ putPacket NewKeys
+    connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload (getPacket initialTransport) s
+    sPutPacket initialTransport s NewKeys
     let s2c    = head $ enc_s2c filteredServerKex
         s2cfun = fromJust $ find (\x -> cryptoName x == s2c) serverCryptos
         s2cmac = head $ mac_s2c filteredServerKex
         s2cmacfun = fromJust $ find (\x -> hashName x == s2cmac) serverHashMacs
+        c2s    = head $ enc_c2s filteredServerKex
+        c2sfun = fromJust $ find (\x -> cryptoName x == c2s) serverCryptos
+        c2smac = head $ mac_c2s filteredServerKex
+        c2smacfun = fromJust $ find (\x -> hashName x == c2smac) serverHashMacs
     MS.modify $ \s -> s { server2client = SshTransport s2cfun s2cmacfun,
                           serverVector = server2ClientIV connectiondata,
+                          client2server = SshTransport c2sfun s2cmacfun,
+                          clientVector = client2ServerIV connectiondata,
                           connectionData = connectiondata
                          }
     --server2client :: SshTransport

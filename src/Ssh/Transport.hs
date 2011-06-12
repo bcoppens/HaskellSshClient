@@ -4,6 +4,7 @@ module Ssh.Transport (
     , ConnectionData (..)
     , SshConnection (..)
     , sGetPacket
+    , sPutPacket
     , makeSshPacket
     , getSizes
 ) where
@@ -77,6 +78,25 @@ nullByte = toEnum $ fromEnum '\0'
 makeSshPacket :: SshTransport -> SshString -> SshString
 makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate (paddingLength t $ fromEnum $ B.length payload) nullByte -- TODO make padding random
 
+sPutPacket :: SshTransport -> Socket -> ClientPacket -> SshConnection ()
+sPutPacket transport socket packet = do
+    transportInfo <- MS.get
+    let rawPacket = makeSshPacket transport $ runPut $ putPacket packet
+        bs = blockSize $ crypto $ client2server transportInfo
+        enc = encrypt $ crypto $ client2server transportInfo
+        hmac = mac $ client2server transportInfo
+        macLen = hashSize hmac
+        macKeySize = hashKeySize hmac
+        macKey = take macKeySize $ client2ServerIntKey $ connectionData transportInfo
+        macFun = hashFunction $ mac $ client2server transportInfo
+        cseq = runPut $ putWord32 $ (toEnum . fromEnum) $ clientSeq transportInfo
+        macBytes = B.unpack $ B.append cseq rawPacket
+        computedMac = macFun macKey macBytes
+    encBytes <- encryptBytes $ B.unpack rawPacket
+    MS.liftIO $ sockWriteBytes socket $ B.pack encBytes
+    MS.liftIO $ sockWriteBytes socket $ B.pack computedMac
+    MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
+
 sGetPacket :: SshTransport -> Socket -> SshConnection ServerPacket
 sGetPacket transport s = do
     transportInfo <- MS.get
@@ -122,17 +142,18 @@ getSizes' = do
     padl  <- getWord8
     return (fromEnum packl, fromEnum padl)
 
-{-
-encryptBytes :: [Word8] -> [Word8] -> SshConnection [Word8]
-encryptBytes key s = do
-    transport <- MS.get
-    let c2s = client2server transport
-        v = clientVector transport
+
+encryptBytes :: [Word8] -> SshConnection [Word8]
+encryptBytes s = do
+    transportInfo <- MS.get
+    let c2s = client2server transportInfo
+        v = clientVector transportInfo
         crypt = encrypt $ crypto c2s
-        encrypted = crypt key $ cbcEnc v s
-    MS.put $ transport { clientVector = encrypted }
+        key = client2ServerEncKey $ connectionData transportInfo
+        (encrypted, newState) = MS.runState (crypt key s) $ CryptionInfo v
+    MS.put $ transportInfo { clientVector = stateVector newState }
     return encrypted
--}
+
 
 decryptBytes :: CryptoFunction -> [Word8] -> SshConnection [Word8]
 decryptBytes c s = do
