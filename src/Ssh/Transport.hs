@@ -94,6 +94,9 @@ sGetPacket transport s = do
     restBytes <- getBlock packetRestSize
     restBytesDecrypted <- decryptBytes dec $ restBytes
     let restPacketBytes = take payloadRestSize restBytesDecrypted
+        macLen = hashSize $ mac $ server2client transportInfo
+    macBytes <- getBlock macLen
+    MS.liftIO $ putStrLn $ "Got " ++ show macLen ++ " bytes of mac " ++ (debugRawStringData $ B.pack macBytes)
     -- TODO verify MAC
     let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
