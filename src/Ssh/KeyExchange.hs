@@ -56,7 +56,8 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     let cookie = replicate 16 (-1 :: Word8) -- TODO random
     let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
     let initialTransport     = SshTransport noCrypto noHashMac
-        clientKexInitPayload = makeSshPacket initialTransport $ runPut $ putPacket clientKex
+        clientKexInitPayload = runPut $ putPacket clientKex
+        clientKexPacket      = makeSshPacket initialTransport $ clientKexInitPayload
     MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
     sPutPacket initialTransport s clientKex
     MS.liftIO $ putStrLn "Mu"
