@@ -19,7 +19,10 @@ import qualified Data.ByteString.Lazy as B
 import qualified Codec.Encryption.AES as AES
 import Codec.Utils
 import Data.LargeWord
+import Control.Monad
 import Control.Monad.State
+
+import Ssh.Debug
 
 type SshString = B.ByteString
 
@@ -38,12 +41,28 @@ data CryptionAlgorithm = CryptionAlgorithm {
     , blockSize :: Int -- can be 0 for stream ciphers
 }
 
+splitInGroupsOf :: Int -> [a] -> [[a]]
+splitInGroupsOf s a = sp a 0 []
+    where sp []       _ acc = [acc]
+          sp t@(x:xs) i acc | i == s    = acc : (sp t 0 [])
+                            | otherwise = sp xs (i+1) (acc ++ [x])
+
+
 cbcAesDecrypt :: Int -> CryptoFunction
 cbcAesDecrypt ks key enc = do
+    -- Decode in chunks of 128 bits
+    let chunks = splitInGroupsOf 16 enc
+    cbcAesDecryptLoop ks key chunks []
+
+
+cbcAesDecryptLoop :: Int -> [Word8] -> [[Word8]] -> [Word8] -> CryptionState [Word8]
+cbcAesDecryptLoop _ _ [] acc = return acc
+cbcAesDecryptLoop ks key (enc:encs) acc = do
     state <- stateVector `liftM` get
-    let plain = aesDecrypt ks key enc
+    let dec   = aesDecrypt ks key enc
+        plain = cbcDec dec state
     put $ CryptionInfo plain
-    return plain
+    cbcAesDecryptLoop ks key encs (acc++plain)
 
 instance Show CryptionAlgorithm where
     show = show . cryptoName
