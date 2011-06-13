@@ -46,16 +46,29 @@ mpIntTestValues =
     , ([0, 0, 0, 5, 0xff, 0x21, 0x52, 0x41, 0x11], -0xdeadbeef)
     ]
 
+boolPutTestValues =
+    [
+      ([0], False)
+    , ([1], True)
+    ]
+
+boolGetTestValues = ([2], True) : boolPutTestValues -- 2 should be read into True, but True must not be written back as 2!
+
 genericGetCheck name getter values = map (\t@(_, v) -> testCase ("Get " ++ name ++ ": " ++ show v) $ checkGet t getter) values
 genericPutCheck name putter values = map (\t@(_, v) -> testCase ("Put " ++ name ++ ": " ++ show v) $ checkPut t putter) values
 
 mpIntGetTests = genericGetCheck "mpInt" getMPInt mpIntTestValues
 mpIntPutTests = genericPutCheck "mpInt" putMPInt mpIntTestValues
 
+boolGetTests = genericGetCheck "Bool" getBool boolGetTestValues
+boolPutTests = genericPutCheck "Bool" putBool boolPutTestValues
+
 tests :: [Test]
 tests = concat
     [
       mpIntGetTests
     , mpIntPutTests
+    , boolGetTests
+    , boolPutTests
     ]
 
