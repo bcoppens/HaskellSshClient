@@ -57,6 +57,21 @@ data Packet =
     , dh_f :: Integer
     , dh_H_signature :: SshString
     }
+  | UserAuthRequest { -- 50
+      authUserName :: SshString
+    , authServiceName :: SshString
+    , authMethodName :: SshString
+    , authPayload :: SshString
+    }
+  | UserAuthFailure { -- 51
+      authenticationsCanContinue :: [SshString]
+    , authPartialSucces :: Bool
+    }
+  | UserAuthSuccess -- 52
+  | UserAuthBanner { -- 53
+      bannerMessage :: SshString
+    , bannerLanguage :: SshString
+    }
     deriving Show
 
 type ClientPacket = Packet
