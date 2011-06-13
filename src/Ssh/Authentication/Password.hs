@@ -11,7 +11,7 @@ import Ssh.Authentication
 
 type SshString = B.ByteString
 
-passwordAuth username = AuthenticationService "password" $ doAuth username
+passwordAuth = AuthenticationService "password" doAuth
 
 doAuth :: SshString -> SshConnection Bool
 doAuth username = error "DoAuth for password"
