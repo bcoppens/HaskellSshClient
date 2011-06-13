@@ -31,6 +31,9 @@ import Ssh.KeyExchange
 import Ssh.HashMac
 import Ssh.HostKeyAlgorithm
 import Ssh.Transport
+import Ssh.Authentication
+import Ssh.Authentication.Password
+import Ssh.Debug
 
 import Debug.Trace
 debug = putStrLn
@@ -61,7 +64,11 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 clientLoop :: Socket -> ConnectionData -> SshConnection ()
 clientLoop socket cd = do
     ti <- MS.get
-    sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
+    --requestService (B.pack "ssh-connection")
+    --sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
+    authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
+    MS.liftIO $ printDebug $ "Authentication OK? " ++ show authOk
+    --sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
     let s2ct = server2client ti
     loop s2ct
         where
@@ -80,7 +87,6 @@ main = do
     -- TODO remove runState!
     let tinfo = SshTransportInfo {-(error "HKA")-} (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
     (cd, newState) <- MS.runStateT (doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
-    --requestService (B.pack "ssh-userauth")
     MS.runStateT (clientLoop connection cd) newState
     sClose connection
     where

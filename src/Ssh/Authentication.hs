@@ -10,6 +10,8 @@ import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
 import qualified Data.ByteString.Lazy as B
 import qualified Control.Monad.State as MS
 
+import Data.List
+
 import Ssh.Packet
 import Ssh.Transport
 
@@ -23,8 +25,13 @@ data AuthenticationService = AuthenticationService {
 authenticate :: Socket -> SshString -> SshString -> [AuthenticationService] -> SshConnection Bool
 authenticate socket username service authServices = do
     transportInfo <- MS.get
-    let transport = client2server transportInfo
+    let c2s = client2server transportInfo
+        s2c = server2client transportInfo
     -- First of all, authenticate with the "none" method, so that it can fail and we see which authentication possibilities are supported
-    sPutPacket transport socket $ UserAuthRequest username service "none" ""
-    response <- sGetPacket transport socket
-    return False
+    sPutPacket c2s socket $ ServiceRequest "ssh-userauth" -- Request userauth service
+    sPutPacket c2s socket $ UserAuthRequest username service "none" ""
+    response <- waitForPacket c2s socket $ \p -> case p of UserAuthFailure _ _ -> True; _ -> False
+    let  canContinue = intersect (map authenticationName authServices) $ authenticationsCanContinue response
+    case canContinue of
+        []    -> return False
+        (x:_) -> return True
