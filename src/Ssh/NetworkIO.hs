@@ -16,6 +16,8 @@ module Ssh.NetworkIO (
     , getMPInt
     , getString
     , putString
+    , getBool
+    , putBool
 ) where
 
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
@@ -137,3 +139,13 @@ putString s = do
     let bytes = (map (toEnum . fromEnum) $ B.unpack s) :: [Word8]
     putWord32 $ toEnum $ fromEnum $ length bytes
     forM_ bytes put
+
+
+getBool :: Get Bool
+getBool = do
+    b <- getWord8
+    return $ b /= 0
+
+putBool :: Bool -> Put
+putBool b =
+    putWord8 $ toEnum $ fromEnum b
