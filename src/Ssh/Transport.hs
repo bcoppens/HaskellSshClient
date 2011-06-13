@@ -102,6 +102,9 @@ sPutPacket transport socket packet = do
     encBytes <- encryptBytes $ B.unpack rawPacket
     MS.liftIO $ sockWriteBytes socket $ B.pack encBytes
     MS.liftIO $ sockWriteBytes socket $ B.pack computedMac
+
+    MS.liftIO $ printDebug $ "Sent packet: " ++ show packet
+
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
 sGetPacket :: SshTransport -> Socket -> SshConnection ServerPacket
@@ -131,9 +134,14 @@ sGetPacket transport s = do
         toMacBytes = (B.unpack sseq) ++ firstBytes ++ restBytesDecrypted -- includes length fields and padding as well
         computedMac = macFun macKey toMacBytes
         macOK = macBytes == computedMac
-    MS.liftIO $ putStrLn $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
+
+    MS.liftIO $ printDebug $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
+
     let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
+
+    MS.liftIO $ printDebug $ "Got packet: " ++ show packet
+
     MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
     return $ annotatePacketWithPayload packet payload
 

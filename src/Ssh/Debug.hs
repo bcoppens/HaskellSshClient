@@ -5,6 +5,7 @@ module Ssh.Debug (
     , logTraceMessage
     , logTraceMessageShow
     , logTraceMessageAndShow
+    , printDebug
     , LogLevel(..)
 ) where
 
@@ -23,9 +24,17 @@ data LogLevel =
     deriving Show
 
 #ifdef DEBUG
+
 debugLevel = LogDebug
+
+printDebug = putStrLn
+
 #else
+
 debugLevel = LogWarning
+
+printDebug = return
+
 #endif
 
 -- logLevelRequired, currentLogLevel

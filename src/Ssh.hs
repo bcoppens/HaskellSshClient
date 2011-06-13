@@ -63,7 +63,6 @@ clientLoop socket cd = do
     ti <- MS.get
     sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
     let s2ct = server2client ti
-    MS.liftIO $ putStrLn "Alo"
     loop s2ct
         where
             loop s2ct = do
