@@ -105,6 +105,12 @@ putPacket NewKeys = put (21 :: Word8)
 putPacket (KEXDHInit e) = do
     put (30 :: Word8)
     putMPInt e
+putPacket (UserAuthRequest userName serviceName methodName payload) = do
+    put (50 :: Word8)
+    putString userName
+    putString serviceName
+    putString methodName
+    putRawByteString payload
 
 getPacket :: Get Packet
 getPacket = do
@@ -136,6 +142,15 @@ getPacket = do
             f <- getMPInt
             h_sig <- getString
             return $ KEXDHReply k_S f h_sig
+        51 -> do -- UserAuthFailure
+            canContinue    <- names `liftM` get
+            partialSuccess <- getBool
+            return $ UserAuthFailure canContinue partialSuccess
+        52 -> return UserAuthSuccess
+        53 -> do -- UserAuthBanner
+            banner <- getString
+            lang   <- getString
+            return $ UserAuthBanner banner lang
         _ -> error $ "unhandled getPacket, msg was " ++ show msg
 
 {-
