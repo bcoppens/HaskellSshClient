@@ -20,19 +20,19 @@ type SshString = B.ByteString
 
 loadString s = B.pack $ map (toEnum . fromEnum) s
 
-checkMPIntPut :: ([Int], Integer) -> H.Assertion -- Int instead of Word8...
-checkMPIntPut (bytes,mpint) = do
-    let value      = runPut $ putMPInt mpint
+checkPut :: (Enum a, Eq b) => ([a], b) -> (b -> Put) -> H.Assertion -- Int instead of Word8...
+checkPut (bytes,actualValue) putter = do
+    let value      = runPut $ putter actualValue
         cmp        = loadString bytes
         result     = value == cmp
         --result'    = trace ( "Put: " ++ show result ++ ": Computed: " ++ (show $ B.unpack value) ++ " =?= Should be: " ++ (show $ B.unpack cmp)) result
         result' = result
     H.assert $ result'
 
-checkMPIntGet :: ([Int], Integer) -> H.Assertion -- Int instead of Word8...
-checkMPIntGet (bytes,mpint) = do
-    let value   = runGet getMPInt $ loadString bytes
-        result  = value == mpint
+checkGet :: (Enum a, Eq b) => ([a], b) -> Get b -> H.Assertion -- Int instead of Word8...
+checkGet (bytes,actualValue) getter = do
+    let value   = runGet getter $ loadString bytes
+        result  = value == actualValue
         --result' = trace ( "Get: " ++ show result ++ ": Computed: " ++ (show value) ++ " =?= Should be: " ++ (show mpint)) result
         result' = result
     H.assert $ result'
@@ -46,8 +46,11 @@ mpIntTestValues =
     , ([0, 0, 0, 5, 0xff, 0x21, 0x52, 0x41, 0x11], -0xdeadbeef)
     ]
 
-mpIntGetTests  = map (\t@(_, v) -> testCase ("Get mpInt: " ++ show v) $ checkMPIntGet t) mpIntTestValues
-mpIntPutTests = map (\t@(_, v) -> testCase ("Put mpInt: " ++ show v) $ checkMPIntPut t) mpIntTestValues
+genericGetCheck name getter values = map (\t@(_, v) -> testCase ("Get " ++ name ++ ": " ++ show v) $ checkGet t getter) values
+genericPutCheck name putter values = map (\t@(_, v) -> testCase ("Put " ++ name ++ ": " ++ show v) $ checkPut t putter) values
+
+mpIntGetTests = genericGetCheck "mpInt" getMPInt mpIntTestValues
+mpIntPutTests = genericPutCheck "mpInt" putMPInt mpIntTestValues
 
 tests :: [Test]
 tests = concat
@@ -55,3 +58,4 @@ tests = concat
       mpIntGetTests
     , mpIntPutTests
     ]
+
