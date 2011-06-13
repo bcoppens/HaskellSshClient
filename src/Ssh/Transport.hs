@@ -5,6 +5,7 @@ module Ssh.Transport (
     , SshConnection (..)
     , sGetPacket
     , sPutPacket
+    , waitForPacket
     , makeSshPacket
     , getSizes
 ) where
@@ -144,6 +145,20 @@ sGetPacket transport s = do
 
     MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
     return $ annotatePacketWithPayload packet payload
+
+-- [!] TODO this should throw some ignored packets to a higher level (i.e. a rekeying request)!
+waitForPacket :: SshTransport -> Socket -> (Packet -> Bool) -> SshConnection Packet
+waitForPacket transport socket cond = do
+    let getter = sGetPacket transport socket
+    loop getter
+    where
+        loop getter = do
+            packet <- getter
+            if cond packet
+                then return packet
+                else do
+                    MS.liftIO $ printDebug $ "Ignoring packet: " ++ show packet
+                    loop getter
 
 -- We decode the initial block
 -- Packet Length is the lenght of the (encrypted, no mac added) packet, WITHOUT the packet_length field, WITH padding_length field!
