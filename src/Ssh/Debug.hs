@@ -6,6 +6,7 @@ module Ssh.Debug (
     , logTraceMessageShow
     , logTraceMessageAndShow
     , printDebug
+    , printDebugLifted
     , LogLevel(..)
 ) where
 
@@ -15,7 +16,9 @@ import Data.List
 import Data.List.Split
 import Debug.Trace
 
+import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
+
 type SshString = B.ByteString
 
 data LogLevel =
@@ -28,6 +31,7 @@ data LogLevel =
 debugLevel = LogDebug
 
 printDebug = putStrLn
+printDebugLifted s = MS.liftIO $ putStrLn s
 
 #else
 
@@ -35,6 +39,8 @@ debugLevel = LogWarning
 
 printDebug :: String -> IO ()
 printDebug _ = return ()
+
+printDebugLifted s = MS.liftIO $ return ()
 
 #endif
 
