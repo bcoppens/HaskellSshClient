@@ -8,6 +8,11 @@ import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
 import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
 import Data.Binary.Put
+import Control.Monad
+
+-- TODO: make portable?
+import System.Posix.IO
+import System.Posix.Terminal
 
 import Ssh.Packet
 import Ssh.NetworkIO
@@ -34,7 +39,9 @@ doAuth socket username servicename = do
         s2c = server2client transportInfo
     sPutPacket c2s socket $ UserAuthRequest username servicename "password" payload
     response <- sGetPacket s2c socket
-    return False
+    return $ case response of
+        UserAuthSuccess -> True
+        _               -> False
 
 hostName = "hostname" -- TODO
 
@@ -42,5 +49,11 @@ askPassword :: SshString -> IO SshString
 askPassword username = do
     let userLocation = B.append username $ B.append "@" hostName
     putStrLn $ "Password for " ++ (map (toEnum . fromEnum) $ B.unpack userLocation) ++ ":"
-    return $ "myPassword"
-
+    -- Echo Off, so we can enter our password
+    attrs <- getTerminalAttributes stdInput
+    setTerminalAttributes stdInput (withoutMode attrs EnableEcho) Immediately
+    -- Read password
+    pwd <- (B.pack . map (toEnum . fromEnum)) `liftM` getLine -- UTF8?
+    -- Reset terminal
+    setTerminalAttributes stdInput attrs Immediately
+    return pwd
