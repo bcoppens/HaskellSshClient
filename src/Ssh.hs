@@ -39,16 +39,6 @@ type SshString = B.ByteString
 
 clientVersionString = "SSH-2.0-BartSSHaskell-0.0.1 This is crappy software!\r\n"
 
-chunkUpString :: Int -> SshString -> [[Word8]] -- bytesPerChunk string
-chunkUpString bpc s = chunkIt bytes []
-    where bytes = map (toEnum . fromEnum) $ B.unpack s
-          chunkIt :: [Word8] -> [[Word8]] -> [[Word8]]
-          chunkIt b acc | todo == []  = new
-                        | otherwise   = chunkIt todo new
-                        where (chunk, todo)   = splitAt bpc b
-                              new             = acc ++ [chunk] -- TODO
-
---clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (aesEncrypt 256) (aesDecrypt 256) 128) ]
 clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (cbcAesEncrypt 256) (cbcAesDecrypt 256) 16) ]
 
 clientHashMacs = [ sha1HashMac ]
@@ -68,8 +58,6 @@ getServerVersionString s = do l <- sockReadLine s
 processPacket :: ServerPacket -> IO ()
 processPacket p = putStrLn $ "processPacket:" ++ show p
 
---computeEncryptionInfo :: HashFunction -> String -> String
-
 clientLoop :: Socket -> ConnectionData -> SshConnection ()
 clientLoop socket cd = do
     ti <- MS.get
@@ -82,10 +70,6 @@ clientLoop socket cd = do
                 packet <- sGetPacket s2ct socket
                 MS.liftIO $ putStrLn $ show packet
                 loop s2ct
-    -- error "End of Client Loop"
-    --clientLoop s cd
-
-
 
 main :: IO ()
 main = do
