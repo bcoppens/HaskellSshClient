@@ -104,7 +104,7 @@ sPutPacket transport socket packet = do
     MS.liftIO $ sockWriteBytes socket $ B.pack encBytes
     MS.liftIO $ sockWriteBytes socket $ B.pack computedMac
 
-    MS.liftIO $ printDebug $ "Sent packet: " ++ show packet
+    printDebugLifted $ "Sent packet: " ++ show packet
 
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
@@ -124,7 +124,7 @@ sGetPacket transport s = do
     firstBytes <- decryptBytes dec firstBlock
     let (packlen, padlen) = getSizes firstBytes
         nextBytes = B.pack $ drop 5 firstBytes
-    MS.liftIO $ putStrLn $ show (packlen, padlen)
+    printDebugLifted $ show (packlen, padlen)
     let payloadRestSize = packlen - padlen - 1 - (smallSize - 5) -- -1 because we already read the padlen field.
         packetRestSize = payloadRestSize + padlen
     restBytes <- getBlock packetRestSize
@@ -136,12 +136,12 @@ sGetPacket transport s = do
         computedMac = macFun macKey toMacBytes
         macOK = macBytes == computedMac
 
-    MS.liftIO $ printDebug $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
+    printDebugLifted $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
 
     let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
 
-    MS.liftIO $ printDebug $ "Got packet: " ++ show packet
+    printDebugLifted $ "Got packet: " ++ show packet
 
     MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
     return $ annotatePacketWithPayload packet payload
@@ -157,7 +157,7 @@ waitForPacket transport socket cond = do
             if cond packet
                 then return packet
                 else do
-                    MS.liftIO $ printDebug $ "Ignoring packet: " ++ show packet
+                    printDebugLifted $ "Ignoring packet: " ++ show packet
                     loop getter
 
 -- We decode the initial block

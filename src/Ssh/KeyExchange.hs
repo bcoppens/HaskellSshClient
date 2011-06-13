@@ -32,6 +32,7 @@ import Ssh.Cryption
 import Ssh.Transport
 import Ssh.HostKeyAlgorithm
 import Ssh.HashMac
+import Ssh.Debug
 
 type SshString = B.ByteString
 
@@ -60,17 +61,16 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
         clientKexPacket      = makeSshPacket initialTransport $ clientKexInitPayload
     MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
     sPutPacket initialTransport s clientKex
-    MS.liftIO $ putStrLn "Mu"
     serverKex <- getPacket initialTransport s
-    MS.liftIO $ putStrLn "ServerKEX before filtering:"
-    MS.liftIO $ putStrLn $ show serverKex
+    printDebugLifted "ServerKEX before filtering:"
+    printDebugLifted $ show serverKex
     -- assert KEXInit packet
     let filteredServerKex = filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs serverKex
         kex   = head $ kex_algos filteredServerKex
         kexFn = fromJust $ find (\x -> kexName x == kex) clientKEXAlgos
         serverKexInitPayload = rawPacket serverKex
-    MS.liftIO $ putStrLn "ServerKEX after filtering:"
-    MS.liftIO $ putStrLn $ show filteredServerKex
+    printDebugLifted "ServerKEX after filtering:"
+    printDebugLifted $ show filteredServerKex
     connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload (getPacket initialTransport) s
     sPutPacket initialTransport s NewKeys
     let s2c    = head $ enc_s2c filteredServerKex
@@ -89,5 +89,5 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
                          }
     --server2client :: SshTransport
     --, serverVector :: [Word8]
-    MS.liftIO $ putStrLn "KEX DONE?"
+    printDebugLifted "KEX DONE?"
     return connectiondata

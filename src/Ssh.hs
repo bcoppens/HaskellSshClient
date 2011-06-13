@@ -82,7 +82,7 @@ main = do
     connection <- connect' "localhost" 22
     --hSetBuffering connection $ BlockBuffering Nothing
     serverVersion <- getServerVersionString connection
-    debug $ show serverVersion
+    printDebug $ show serverVersion
     sendAll connection clientVersionString
     -- TODO remove runState!
     let tinfo = SshTransportInfo {-(error "HKA")-} (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
