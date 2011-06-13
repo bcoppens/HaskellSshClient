@@ -20,7 +20,7 @@ type SshString = B.ByteString
 
 data AuthenticationService = AuthenticationService {
       authenticationName :: SshString
-    , doAuthenticate :: SshString -> SshConnection Bool -- Authentication succesful?
+    , doAuthenticate :: Socket -> SshString -> SshString -> SshConnection Bool -- Authentication succesful?
 }
 
 authenticate :: Socket -> SshString -> SshString -> [AuthenticationService] -> SshConnection Bool
@@ -39,7 +39,7 @@ authenticate socket username service authServices = do
     where loopSupported []             = return False
           loopSupported (askPass:rest) = do
             MS.liftIO $ printDebug $ "Trying authentication method " ++ (map (toEnum . fromEnum) $ B.unpack $ authenticationName askPass)
-            ok <- doAuthenticate askPass username
+            ok <- doAuthenticate askPass socket username service
             case ok of
                 True  -> return True
                 False -> loopSupported rest
