@@ -33,7 +33,8 @@ printDebug = putStrLn
 
 debugLevel = LogWarning
 
-printDebug = return
+printDebug :: String -> IO ()
+printDebug _ = return ()
 
 #endif
 
