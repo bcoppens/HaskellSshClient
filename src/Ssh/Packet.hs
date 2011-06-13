@@ -29,6 +29,9 @@ data Packet =
    | Ignore { -- 2
      ignoreData :: SshString
    }
+   | Unimplemented { -- 3
+     rejectedSequenceNumber :: Int
+   }
    | ServiceRequest { -- 5
       serviceReqName :: SshString
    }
@@ -124,6 +127,9 @@ getPacket = do
         2 -> do -- Ignore
             s <-getString
             return $ Ignore s
+        3  -> do -- Unimplemented
+            seqNr <- fromEnum `liftM` getWord32
+            return $ Unimplemented seqNr
         6  -> do -- ServiceAccept
             s <- getString
             return $ ServiceAccept s
