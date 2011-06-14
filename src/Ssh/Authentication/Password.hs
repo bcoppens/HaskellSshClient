@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Password authentication for SSH
 module Ssh.Authentication.Password (
       passwordAuth
 ) where

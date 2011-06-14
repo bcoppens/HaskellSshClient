@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Generic support for SSH Authentication Protocol (RFC 4252).
 module Ssh.Authentication (
       authenticate
     , AuthenticationService(..)
@@ -18,11 +19,14 @@ import Ssh.Debug
 
 type SshString = B.ByteString
 
+-- | Defines how a specific authentication service works
 data AuthenticationService = AuthenticationService {
       authenticationName :: SshString
-    , doAuthenticate :: Socket -> SshString -> SshString -> SshConnection Bool -- Authentication succesful?
+    -- | Takes socket, username, servicename. Returns if authentication was succesful
+    , doAuthenticate :: Socket -> SshString -> SshString -> SshConnection Bool
 }
 
+-- | Authenticate over a socket: a username and a service, given a list of supported 'AuthenticationService's
 authenticate :: Socket -> SshString -> SshString -> [AuthenticationService] -> SshConnection Bool
 authenticate socket username service authServices = do
     transportInfo <- MS.get
