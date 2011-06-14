@@ -1,12 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+-- | SSH Packet definition, including the functions needed for binary input/output with 'Get'/'Put'
 module Ssh.Packet (
+    -- | Data Types
       Packet (..)
     , ClientPacket
     , ServerPacket
-    , annotatePacketWithPayload
+    -- | Decoding and encoding
     , putPacket
     , getPacket
+    -- | Helper functions
+    , annotatePacketWithPayload
 ) where
 
 import Data.Binary
@@ -19,7 +22,7 @@ import Ssh.NetworkIO
 
 type SshString = B.ByteString
 
-
+-- | This should define all SSH packets defined by the standard
 data Packet =
     Disconnect { -- 1
       disc_code :: Int
@@ -77,14 +80,19 @@ data Packet =
     }
     deriving Show
 
+-- | This is a packet sent by the client
 type ClientPacket = Packet
+-- | This is a packet sent by the server
 type ServerPacket = Packet
 
+-- TODO not needed anymore currently?
+-- | the KEXInit can contain its own payload encoded
 annotatePacketWithPayload :: ServerPacket -> SshString -> ServerPacket 
 annotatePacketWithPayload packet@(KEXInit _ _ _ _ _ _ _ _) pl = packet { rawPacket = pl }
 annotatePacketWithPayload p _ = p
 
 
+-- | Write a 'Packet', and make a 'Put' out of it which we can 'runPut' into an 'SshByteString'
 putPacket :: Packet -> Put
 putPacket (ServiceRequest n) = do
     put (5 :: Word8)
@@ -115,6 +123,7 @@ putPacket (UserAuthRequest userName serviceName methodName payload) = do
     putString methodName
     putRawByteString payload
 
+-- | Can decode a 'Packet' from an 'SshBytestring' using 'runGet'
 getPacket :: Get Packet
 getPacket = do
     msg <- getWord8
