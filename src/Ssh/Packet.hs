@@ -78,6 +78,66 @@ data Packet =
       bannerMessage :: SshString
     , bannerLanguage :: SshString
     }
+  | GlobalRequest { -- 80
+      requestName :: SshString
+    , wantsReply :: Bool
+    , requestPayload :: SshString
+  }
+  | RequestSuccess { -- 81
+      requestData :: SshString
+  }
+  | RequestFailure -- 82
+  | ChannelOpen { -- 90
+      clientChannelNr :: Int
+    , payload :: SshString
+    , initWindowSize :: Int
+    , maxPacketSize :: Int
+    , channelPayload :: SshString
+  }
+  | ChannelOpenConfirmation { -- 91
+      clientChannelNr :: Int
+    , channelNr :: Int
+    , initWindowSize :: Int
+    , maxPacjetSize :: Int
+    , channelPayload :: SshString
+  }
+  | ChannelOpenFailure { -- 92
+      channelNr :: Int
+    , reasonCode :: Int
+    , description :: SshString
+    , language :: SshString
+  }
+  | ChannelWindowAdjust { -- 93
+      channelNr :: Int
+    , bytesToAdd :: Int
+  }
+  | ChannelData { -- 94
+      channelNr :: Int
+    , channelPayload :: SshString
+  }
+  | ChannelExtendedData { --95
+      channelNr :: Int
+    , extendedDataTypeCode :: Int
+    , channelPayload :: SshString
+  }
+  | ChannelEof { -- 96
+      channelNr :: Int
+  }
+  | ChannelClose { -- 97
+      channelNr :: Int
+  }
+  | ChannelRequest { -- 98
+      channelNr :: Int
+    , requestType :: SshString
+    , wantsReply :: Bool
+    , channelPayload :: SshString
+  }
+  | ChannelSuccess { -- 99
+      channelNr :: Int
+  }
+  | ChannelFailure { -- 100
+      channelNr :: Int
+  }
     deriving Show
 
 -- | This is a packet sent by the client
