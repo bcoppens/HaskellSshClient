@@ -1,11 +1,16 @@
+-- | The generic part of SSH's Transport Layer Protocol (RFC 4253).
+--   Uses crypto functions to encrypt/decrypt packets, figure out their sizes, and checks their HMAC
 module Ssh.Transport (
+    -- * Data Types
       SshTransport (..)
     , SshTransportInfo (..)
     , ConnectionData (..)
     , SshConnection (..)
+    -- * Reading/Writing 'Packet's over the network
     , sGetPacket
     , sPutPacket
     , waitForPacket
+    -- * Encoding and decoding for 'Packet's
     , makeSshPacket
     , getSizes
 ) where
@@ -32,12 +37,13 @@ import Ssh.Debug
 
 type SshString = B.ByteString
 
-
+-- | Information needed to encrypt and verify a packet in a single direction
 data SshTransport = SshTransport {
       crypto :: CryptionAlgorithm
     , mac    :: HashMac
 } deriving Show
 
+-- | The state of the SSH Transport info in two directions: server to client, and client to server
 data SshTransportInfo = SshTransportInfo {
 {-      kex_alg :: KeyExchangeAlgorithm
     , serverhost_key_alg :: HostKeyAlgorithm
@@ -54,8 +60,10 @@ data SshTransportInfo = SshTransportInfo {
     , connectionData :: ConnectionData
 } deriving Show
 
+-- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
 
+-- | Wrap an SSH packet payload with a length header and its padding
 makeSshPacketWithoutMac :: SshTransport -> SshString -> SshString -> SshString
 makeSshPacketWithoutMac t payload padding = runPut $ do
     let pl = B.append payload padding
@@ -72,6 +80,7 @@ makeSshPacket' t payload padding = runPut $ do
 
 {- Pad with len pad bytes so that size of |packetlen|padlen|payload|padding| is multiple of max (8, cipherblocksize), and 4 <= len <= 255 -}
 -- TODO: randomize?
+-- | Compute the length of padding needed for a packet of the given size, for the specified transport
 paddingLength :: SshTransport -> Int -> Int
 paddingLength t packLen | minPadding < 4  = 4 + paddingLength t (packLen + 4)
                         | otherwise       = minPadding
@@ -81,11 +90,14 @@ paddingLength t packLen | minPadding < 4  = 4 + paddingLength t (packLen + 4)
 
 nullByte = toEnum $ fromEnum '\0'
 
+-- | Given an SSH packet payload and a transport, make a real SSH packet out of it, including size and padding fields
 makeSshPacket :: SshTransport -> SshString -> SshString
 makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate padLen nullByte -- TODO make padding random
     where
         padLen = (paddingLength t $ fromEnum $ B.length payload)
 
+
+-- | Take a 'Packet', encode it to bytes that can be sent over the wire. Applies necessary encryption and MAC codes, and sends over the socket
 sPutPacket :: SshTransport -> Socket -> ClientPacket -> SshConnection ()
 sPutPacket transport socket packet = do
     transportInfo <- MS.get
@@ -108,6 +120,7 @@ sPutPacket transport socket packet = do
 
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
+-- | Read a packet from the socket, decrypt it/checks MAC if needed, and decodes into a real 'Packet'
 sGetPacket :: SshTransport -> Socket -> SshConnection ServerPacket
 sGetPacket transport s = do
     transportInfo <- MS.get
@@ -147,6 +160,7 @@ sGetPacket transport s = do
     return $ annotatePacketWithPayload packet payload
 
 -- [!] TODO this should throw some ignored packets to a higher level (i.e. a rekeying request)!
+-- | Ignore all packets until one is found matching the condition, and return that
 waitForPacket :: SshTransport -> Socket -> (Packet -> Bool) -> SshConnection Packet
 waitForPacket transport socket cond = do
     let getter = sGetPacket transport socket
@@ -163,16 +177,18 @@ waitForPacket transport socket cond = do
 -- We decode the initial block
 -- Packet Length is the lenght of the (encrypted, no mac added) packet, WITHOUT the packet_length field, WITH padding_length field!
 -- This means that the length of the payload == packetlen - padlen - 1
+-- | Return a tuple of (packet length, padding length) from the header of an SSH packet
 getSizes :: [Word8] -> (Int, Int) -- (packetlen, padlen)
 getSizes block = runGet getSizes' $ B.pack block
 
+-- | Actually do the reading for 'getSizes'
 getSizes' :: Get (Int, Int)
 getSizes' = do
     packl <- getWord32
     padl  <- getWord8
     return (fromEnum packl, fromEnum padl)
 
-
+-- | Encrypt bytes with the encryption specified for client to server, keeping the state needed for CBC
 encryptBytes :: [Word8] -> SshConnection [Word8]
 encryptBytes s = do
     transportInfo <- MS.get
@@ -184,7 +200,7 @@ encryptBytes s = do
     MS.put $ transportInfo { clientVector = stateVector newState }
     return encrypted
 
-
+-- | Decrypt bytes with the decryption specified for server to client, keeping the state needed for CBC
 decryptBytes :: CryptoFunction -> [Word8] -> SshConnection [Word8]
 decryptBytes c s = do
     transportInfo <- MS.get
