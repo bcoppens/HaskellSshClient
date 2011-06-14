@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Generic Key Exchange facilities. Performs the key exchange
 module Ssh.KeyExchange(
       doKex
 ) where
@@ -36,10 +37,12 @@ import Ssh.Debug
 
 type SshString = B.ByteString
 
--- We drop all the entries that we don't know about. Order in the server list is irrelevant, client's first is chosen
+-- | We drop all the entries that we don't know about. Order in the server list is irrelevant, client's first is chosen
 serverListFiltered :: [SshString] -> [SshString] -> [SshString]
 serverListFiltered clientList serverList = filter (`elem` serverList) clientList
 
+-- | Filter all algorithms from a 'KEXInit' packet that are not in the given arguments.
+--   Can be used to see which algorithms are supported by both client and server. Keeps the order of the client's supported lists
 filterKEXInit :: [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Packet -> Packet
 filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs (KEXInit raw c ka hka ecs esc mcs msc) =
     KEXInit raw c ka' hka' ecs' esc' mcs' msc'
@@ -51,6 +54,9 @@ filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHa
         mcs' = serverListFiltered (map hashName clientHashMacs) mcs
         msc' = serverListFiltered (map hashName serverHashMacs) msc
 
+-- | Perform key exchange
+--   Needs the version strings of both client and server. Needs a list of all client-side supported algorithms.
+--   We also need a socket to perform the key exchange on, and a function that can be used to decode and decrypt packets using a given 'Transport'.
 doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Socket -> (SshTransport -> Socket -> SshConnection ServerPacket) -> SshConnection ConnectionData
 doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs s getPacket = do
     --cookie <- fmap (fromInteger . toInteger) $ replicateM 16 $ (randomRIO (0, 255 :: Int)) :: IO [Word8]
