@@ -98,10 +98,11 @@ makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate padLen n
 
 
 -- | Take a 'Packet', encode it to bytes that can be sent over the wire. Applies necessary encryption and MAC codes, and sends over the socket
-sPutPacket :: SshTransport -> Socket -> ClientPacket -> SshConnection ()
-sPutPacket transport socket packet = do
+sPutPacket :: Socket -> ClientPacket -> SshConnection ()
+sPutPacket socket packet = do
     transportInfo <- MS.get
-    let rawPacket = makeSshPacket transport $ runPut $ putPacket packet
+    let transport = client2server transportInfo
+        rawPacket = makeSshPacket transport $ runPut $ putPacket packet
         bs = blockSize $ crypto $ client2server transportInfo
         enc = encrypt $ crypto $ client2server transportInfo
         hmac = mac $ client2server transportInfo
@@ -121,10 +122,11 @@ sPutPacket transport socket packet = do
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
 -- | Read a packet from the socket, decrypt it/checks MAC if needed, and decodes into a real 'Packet'
-sGetPacket :: SshTransport -> Socket -> SshConnection ServerPacket
-sGetPacket transport s = do
+sGetPacket :: Socket -> SshConnection ServerPacket
+sGetPacket s = do
     transportInfo <- MS.get
-    let bs = blockSize $ crypto $ server2client transportInfo
+    let transport = server2client transportInfo
+        bs = blockSize $ crypto $ server2client transportInfo
         smallSize = max 5 bs -- We have to decode at least 5 bytes to read the sizes of this packet. We might need to decode more to take cipher size into account
         getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes s size
         dec = decrypt $ crypto $ server2client transportInfo
@@ -161,9 +163,9 @@ sGetPacket transport s = do
 
 -- [!] TODO this should throw some ignored packets to a higher level (i.e. a rekeying request)!
 -- | Ignore all packets until one is found matching the condition, and return that
-waitForPacket :: SshTransport -> Socket -> (Packet -> Bool) -> SshConnection Packet
-waitForPacket transport socket cond = do
-    let getter = sGetPacket transport socket
+waitForPacket :: Socket -> (Packet -> Bool) -> SshConnection Packet
+waitForPacket socket cond = do
+    let getter = sGetPacket socket
     loop getter
     where
         loop getter = do

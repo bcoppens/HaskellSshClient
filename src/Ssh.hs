@@ -69,13 +69,12 @@ clientLoop socket cd = do
     authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug $ "Authentication OK? " ++ show authOk
     --sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
-    let s2ct = server2client ti
-    loop s2ct
+    loop
         where
-            loop s2ct = do
-                packet <- sGetPacket s2ct socket
+            loop = do
+                packet <- sGetPacket socket
                 MS.liftIO $ putStrLn $ show packet
-                loop s2ct
+                loop
 
 main :: IO ()
 main = do

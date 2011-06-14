@@ -29,13 +29,10 @@ data AuthenticationService = AuthenticationService {
 -- | Authenticate over a socket: a username and a service, given a list of supported 'AuthenticationService's
 authenticate :: Socket -> SshString -> SshString -> [AuthenticationService] -> SshConnection Bool
 authenticate socket username service authServices = do
-    transportInfo <- MS.get
-    let c2s = client2server transportInfo
-        s2c = server2client transportInfo
     -- First of all, authenticate with the "none" method, so that it can fail and we see which authentication possibilities are supported
-    sPutPacket c2s socket $ ServiceRequest "ssh-userauth" -- Request userauth service
-    sPutPacket c2s socket $ UserAuthRequest username service "none" ""
-    response <- waitForPacket c2s socket $ \p -> case p of UserAuthFailure _ _ -> True; _ -> False
+    sPutPacket socket $ ServiceRequest "ssh-userauth" -- Request userauth service
+    sPutPacket socket $ UserAuthRequest username service "none" ""
+    response <- waitForPacket socket $ \p -> case p of UserAuthFailure _ _ -> True; _ -> False
     let supportedNames = authenticationsCanContinue response
         canContinue = filter (\s -> authenticationName s `elem` supportedNames) authServices
     loopSupported canContinue

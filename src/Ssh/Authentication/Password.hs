@@ -33,13 +33,10 @@ userAuthPayload pwd = runPut $ do -- pws should be UTF-8 encoded!
 -- TODO: handle SSH_MSG_USERAUTH_PASSWD_CHANGEREQ?
 doAuth :: Socket -> SshString -> SshString -> SshConnection Bool
 doAuth socket username servicename = do
-    transportInfo <- MS.get
     pwd <- MS.liftIO $ askPassword username
     let payload = userAuthPayload pwd
-        c2s = client2server transportInfo
-        s2c = server2client transportInfo
-    sPutPacket c2s socket $ UserAuthRequest username servicename "password" payload
-    response <- sGetPacket s2c socket
+    sPutPacket socket $ UserAuthRequest username servicename "password" payload
+    response <- sGetPacket socket
     return $ case response of
         UserAuthSuccess -> True
         _               -> False

@@ -80,7 +80,7 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
         dhInit = KEXDHInit e
     printDebugLifted $ show dhInit
     --MS.liftIO $ sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
-    sPutPacket (client2server transportInfo) s dhInit
+    sPutPacket s dhInit
     dhReply <- getPacket s
     printDebugLifted $ show dhReply
     newKeys <- getPacket s
