@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Diffie-Hellman Key Exchange
 module Ssh.KeyExchangeAlgorithm.DiffieHellman (
       diffieHellmanGroup
     , dhGroup1
@@ -44,6 +45,8 @@ data DHGroup = DHGroup {
 -- | "diffie-hellman-group1-sha1" uses Oakley Group 2! Not Group 1!
 dhGroup1 = DHGroup 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF 2
 
+
+-- | Computes the Exchange Hash as specified on p23 of the SSH Transport Layer Protocol (RFC 4253)
 dhComputeExchangeHash :: SshString -> SshString -> SshString -> SshString -> SshString -> Integer -> Integer -> SshString -> SshString
 dhComputeExchangeHash clientIdent serverIdent clientKexPayload serverKexPayload hostKey e f sharedSecret =
   bytestringDigest $ sha1 $ runPut $ do -- TODO make sha1 configurable
@@ -56,15 +59,18 @@ dhComputeExchangeHash clientIdent serverIdent clientKexPayload serverKexPayload 
     putMPInt f
     putRawByteString sharedSecret -- has already been runPut through putMPInt
 
+-- | String representation of the shared secret that we compute
 dhComputeSharedSecret :: Integer -> Integer -> Integer -> SshString
 dhComputeSharedSecret f x p = runPut $ putMPInt $ modexp f x p
 
 convert = toEnum . fromEnum
 
+-- | The key exchange needs to filter out the newlines of the version string
 filterNewlines :: SshString -> SshString
 filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r')) s -- Filter only the FINAL \r\n??? ###
 
 --TODO use hash
+-- | Perform Diffie-Hellman key exchange
 diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> SshString -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
 diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit rawServerKexInit getPacket s = do
     transportInfo <- MS.get
