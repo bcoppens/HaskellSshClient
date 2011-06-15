@@ -1,0 +1,7 @@
+# Ignore swap files and cabal output.
+*.hi
+*.o
+*.swo
+*.swp
+*~
+
