@@ -189,6 +189,20 @@ putPacket (ChannelOpen channelType channelNr initWindowSize maxPacketSize channe
     putWord32 $ (toEnum . fromEnum) initWindowSize
     putWord32 $ (toEnum . fromEnum) maxPacketSize
     putRawByteString channelPayload
+putPacket (ChannelWindowAdjust nr toAdd) = do
+    put (93 :: Word8)
+    putWord32 $ (toEnum . fromEnum) nr
+    putWord32 $ (toEnum . fromEnum) toAdd
+putPacket (ChannelData nr payload) = do
+    put (94 :: Word8)
+    putWord32 $ (toEnum . fromEnum) nr
+    putRawByteString payload
+putPacket (ChannelEof nr) = do
+    put (96 :: Word8)
+    putWord32 $ (toEnum . fromEnum) nr
+putPacket (ChannelClose nr) = do
+    put (97 :: Word8)
+    putWord32 $ (toEnum . fromEnum) nr
 putPacket (ChannelRequest channelNr requestType wantsReply channelPayload) = do
     put (98 :: Word8)
     putWord32 $ (toEnum . fromEnum) channelNr
@@ -253,6 +267,20 @@ getPacket = do
             maxPacketSize <- fromEnum `liftM` getWord32
             payload <- getRemainingLazyByteString
             return $ ChannelOpenConfirmation recipientChannelNr senderChannelNr initWindowSize maxPacketSize payload
+        93 -> do -- ChannelWindowAdjust
+            channelNr <- fromEnum `liftM` getWord32
+            bytesToAdd <- fromEnum `liftM` getWord32
+            return $ ChannelWindowAdjust channelNr bytesToAdd
+        94 -> do -- ChannelData
+            channelNr <- fromEnum `liftM` getWord32
+            channelPayload <- getRemainingLazyByteString
+            return $ ChannelData channelNr channelPayload
+        96 -> do -- ChannelEof
+            channelNr <- fromEnum `liftM` getWord32
+            return $ ChannelEof channelNr
+        97 -> do -- ChannelClose
+            channelNr <- fromEnum `liftM` getWord32
+            return $ ChannelClose channelNr
         98 -> do -- ChannelRequest
             channelNr <- fromEnum `liftM` getWord32
             requestType <- getString
