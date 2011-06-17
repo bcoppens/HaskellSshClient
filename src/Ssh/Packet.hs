@@ -189,6 +189,19 @@ putPacket (ChannelOpen channelType channelNr initWindowSize maxPacketSize channe
     putWord32 $ (toEnum . fromEnum) initWindowSize
     putWord32 $ (toEnum . fromEnum) maxPacketSize
     putRawByteString channelPayload
+putPacket (ChannelRequest channelNr requestType wantsReply channelPayload) = do
+    put (98 :: Word8)
+    putWord32 $ (toEnum . fromEnum) channelNr
+    putString requestType
+    putBool wantsReply
+    putRawByteString channelPayload
+putPacket (ChannelSuccess nr) = do
+    put (99 :: Word8)
+    putWord32 $ (toEnum . fromEnum) nr
+putPacket (ChannelFailure nr) = do
+    put (100 :: Word8)
+    putWord32 $ (toEnum . fromEnum) nr
+
 
 -- | Can decode a 'Packet' from an 'SshBytestring' using 'runGet'
 getPacket :: Get Packet
@@ -240,6 +253,18 @@ getPacket = do
             maxPacketSize <- fromEnum `liftM` getWord32
             payload <- getRemainingLazyByteString
             return $ ChannelOpenConfirmation recipientChannelNr senderChannelNr initWindowSize maxPacketSize payload
+        98 -> do -- ChannelRequest
+            channelNr <- fromEnum `liftM` getWord32
+            requestType <- getString
+            wantsReply <- getBool
+            payload <- getRemainingLazyByteString
+            return $ ChannelRequest channelNr requestType wantsReply payload
+        99 -> do -- ChannelSuccess
+            nr <- fromEnum `liftM` getWord32
+            return $ ChannelSuccess nr
+        100-> do -- ChannelFailure
+            nr <- fromEnum `liftM` getWord32
+            return $ ChannelFailure nr
         _ -> error $ "unhandled getPacket, msg was " ++ show msg
 
 {-
