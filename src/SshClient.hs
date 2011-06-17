@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+module SshClient (
+      main
+) where
+
 import Network
 import Data.Binary.Put
 import Data.Word
