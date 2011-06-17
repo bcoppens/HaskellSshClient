@@ -72,11 +72,12 @@ clientLoop socket cd = do
     ti <- MS.get
     authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug $ "Authentication OK? " ++ show authOk
-    MS.evalStateT (openChannel socket sessionHandler "") initialGlobalChannelsState
-    loop
+    (channel, newState) <- flip MS.runStateT initialGlobalChannelsState $ openChannel socket sessionHandler ""
+    newState' <- flip MS.evalStateT channel $ requestExec socket "cat /home/bartcopp/projecten/haskell/sshclient/README"
+    MS.evalStateT loop newState'
         where
             loop = do
-                packet <- sGetPacket socket
+                packet <- MS.lift $ sGetPacket socket
                 MS.liftIO $ putStrLn $ show packet
                 loop
 

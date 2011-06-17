@@ -9,6 +9,7 @@ module Ssh.Channel(
     , GlobalChannelInfo(..)
     , openChannel
     , initialGlobalChannelsState
+    , getLocalChannelNr
 ) where
 
 import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
@@ -27,16 +28,16 @@ import Ssh.String
 -- | Keeps generic information about the channel, such as maximal packet size, and a handler.
 --   The handler can update the channel information through the 'Channel' State
 data ChannelInfo = ChannelInfo {
-      channelClientId :: Int
-    , channelServerId :: Int
+      channelLocalId :: Int
+    , channelRemoteId :: Int
     , sentEof :: Bool
     , channelWindowSizeLeft :: Int
     , channelMaxPacketSize :: Int
     , channelInfoHandler :: ChannelHandler
 }
 
--- | A channel is stateful, and has to do socket IO
-type Channel = MS.StateT ChannelInfo IO
+-- | A channel is stateful, and has to do socket IO over the 'SshConnection'
+type Channel = MS.StateT ChannelInfo SshConnection
 
 -- | The handler for a certain channel type
 data ChannelHandler = ChannelHandler {
@@ -57,8 +58,12 @@ type Channels = MS.StateT GlobalChannelInfo SshConnection
 
 initialGlobalChannelsState = GlobalChannelInfo Map.empty [0 .. 2^31]
 
--- Open a channel on the given socket, with a channel type, a handler, and initial information to put in the packet's payload
-openChannel :: Socket -> ChannelHandler -> SshString -> Channels ()
+-- | Get the local channel number of a Channel
+getLocalChannelNr :: Channel Int
+getLocalChannelNr = channelLocalId `fmap` MS.get
+
+-- | Open a channel on the given socket, with a channel type, a handler, and initial information to put in the packet's payload
+openChannel :: Socket -> ChannelHandler -> SshString -> Channels ChannelInfo
 openChannel socket handler openInfo = do
     state <- MS.get
 
@@ -79,3 +84,5 @@ openChannel socket handler openInfo = do
     let used  = Map.insert local chanInfo $ usedChannels state
 
     MS.put $ GlobalChannelInfo { usedChannels = used, freeChannels = free }
+
+    return chanInfo
