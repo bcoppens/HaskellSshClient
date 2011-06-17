@@ -98,7 +98,7 @@ data Packet =
       recipientChannelNr :: Int
     , senderChannelNr :: Int
     , initWindowSize :: Int
-    , maxPacjetSize :: Int
+    , maxPacketSize :: Int
     , channelPayload :: SshString
   }
   | ChannelOpenFailure { -- 92
@@ -238,8 +238,8 @@ getPacket = do
             senderChannelNr <- fromEnum `liftM` getWord32
             initWindowSize <- fromEnum `liftM` getWord32
             maxPacketSize <- fromEnum `liftM` getWord32
-            -- channelPayload TODO
-            return $ ChannelOpenConfirmation recipientChannelNr senderChannelNr initWindowSize maxPacketSize undefined
+            payload <- getRemainingLazyByteString
+            return $ ChannelOpenConfirmation recipientChannelNr senderChannelNr initWindowSize maxPacketSize payload
         _ -> error $ "unhandled getPacket, msg was " ++ show msg
 
 {-

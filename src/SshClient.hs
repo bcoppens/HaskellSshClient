@@ -38,6 +38,8 @@ import Ssh.Transport
 import Ssh.Authentication
 import Ssh.Authentication.Password
 import Ssh.Debug
+import Ssh.Channel
+import Ssh.Channel.Session
 
 import Debug.Trace
 debug = putStrLn
@@ -68,11 +70,9 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 clientLoop :: Socket -> ConnectionData -> SshConnection ()
 clientLoop socket cd = do
     ti <- MS.get
-    --requestService (B.pack "ssh-connection")
-    --sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
     authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug $ "Authentication OK? " ++ show authOk
-    --sPutPacket (client2server ti) socket $ ServiceRequest "ssh-wololooo"
+    MS.evalStateT (openChannel socket sessionHandler "") initialGlobalChannelsState
     loop
         where
             loop = do

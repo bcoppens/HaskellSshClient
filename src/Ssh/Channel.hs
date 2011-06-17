@@ -2,7 +2,13 @@
 
 -- | Implements the generic part of the SSH Connection Protocol (RFC 4254).
 module Ssh.Channel(
-      
+      ChannelInfo(..)
+    , Channel(..)
+    , Channels(..)
+    , ChannelHandler(..)
+    , GlobalChannelInfo(..)
+    , openChannel
+    , initialGlobalChannelsState
 ) where
 
 import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
@@ -16,8 +22,7 @@ import Data.List
 import Ssh.Packet
 import Ssh.Transport
 import Ssh.Debug
-
-type SshString = B.ByteString
+import Ssh.String
 
 -- | Keeps generic information about the channel, such as maximal packet size, and a handler.
 --   The handler can update the channel information through the 'Channel' State
@@ -50,13 +55,16 @@ data GlobalChannelInfo = GlobalChannelInfo {
 
 type Channels = MS.StateT GlobalChannelInfo SshConnection
 
+initialGlobalChannelsState = GlobalChannelInfo Map.empty [0 .. 2^31]
+
 -- Open a channel on the given socket, with a channel type, a handler, and initial information to put in the packet's payload
-openChannel :: Socket -> SshString -> ChannelHandler -> SshString -> Channels ()
-openChannel socket channeltype handler openInfo = do
+openChannel :: Socket -> ChannelHandler -> SshString -> Channels ()
+openChannel socket handler openInfo = do
     state <- MS.get
 
     -- Get a new local channel nr
-    let local = head $ freeChannels state
+    let name  = channelName handler
+        local = head $ freeChannels state
         free  = take 1 $ freeChannels state
 
     -- Open the channel
@@ -64,6 +72,9 @@ openChannel socket channeltype handler openInfo = do
         ws = 2^31
         ps = 32768
         chanInfo = ChannelInfo local remote False ws ps handler
+        openRequest = ChannelOpen name local ws ps openInfo
+
+    MS.lift $ sPutPacket socket openRequest
 
     let used  = Map.insert local chanInfo $ usedChannels state
 
