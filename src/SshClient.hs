@@ -71,14 +71,14 @@ clientLoop :: Socket -> ConnectionData -> SshConnection ()
 clientLoop socket cd = do
     ti <- MS.get
     authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
-    MS.liftIO $ printDebug $ "Authentication OK? " ++ show authOk
+    MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
     (channel, newState) <- flip MS.runStateT initialGlobalChannelsState $ openChannel socket sessionHandler ""
     newState' <- flip MS.evalStateT channel $ requestExec socket "cat /home/bartcopp/projecten/haskell/sshclient/README"
     MS.evalStateT loop newState'
         where
             loop = do
                 packet <- MS.lift $ sGetPacket socket
-                MS.liftIO $ putStrLn $ show packet
+                --MS.liftIO $ putStrLn $ show packet
                 loop
 
 main :: IO ()
@@ -86,7 +86,7 @@ main = do
     connection <- connect' "localhost" 22
     --hSetBuffering connection $ BlockBuffering Nothing
     serverVersion <- getServerVersionString connection
-    printDebug $ show serverVersion
+    printDebug logLowLevelDebug $ show serverVersion
     sendAll connection clientVersionString
     -- TODO remove runState!
     let tinfo = SshTransportInfo {-(error "HKA")-} (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")

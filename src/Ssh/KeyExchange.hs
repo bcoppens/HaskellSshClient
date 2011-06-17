@@ -34,8 +34,7 @@ import Ssh.Transport
 import Ssh.HostKeyAlgorithm
 import Ssh.HashMac
 import Ssh.Debug
-
-type SshString = B.ByteString
+import Ssh.String
 
 -- | We drop all the entries that we don't know about. Order in the server list is irrelevant, client's first is chosen
 serverListFiltered :: [SshString] -> [SshString] -> [SshString]
@@ -68,15 +67,15 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
     sPutPacket s clientKex
     serverKex <- getPacket s
-    printDebugLifted "ServerKEX before filtering:"
-    printDebugLifted $ show serverKex
+    printDebugLifted logLowLevelDebug "ServerKEX before filtering:"
+    printDebugLifted logLowLevelDebug $ show serverKex
     -- assert KEXInit packet
     let filteredServerKex = filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs serverKex
         kex   = head $ kex_algos filteredServerKex
         kexFn = fromJust $ find (\x -> kexName x == kex) clientKEXAlgos
         serverKexInitPayload = rawPacket serverKex
-    printDebugLifted "ServerKEX after filtering:"
-    printDebugLifted $ show filteredServerKex
+    printDebugLifted logLowLevelDebug "ServerKEX after filtering:"
+    printDebugLifted logLowLevelDebug $ show filteredServerKex
     connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload getPacket s
     sPutPacket s NewKeys
     let s2c    = head $ enc_s2c filteredServerKex
@@ -93,5 +92,5 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
                           clientVector = client2ServerIV connectiondata,
                           connectionData = connectiondata
                          }
-    printDebugLifted "KEX DONE?"
+    printDebugLifted logLowLevelDebug "KEX DONE?"
     return connectiondata

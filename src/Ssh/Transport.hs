@@ -117,7 +117,7 @@ sPutPacket socket packet = do
     MS.liftIO $ sockWriteBytes socket $ B.pack encBytes
     MS.liftIO $ sockWriteBytes socket $ B.pack computedMac
 
-    printDebugLifted $ "Sent packet: " ++ show packet
+    printDebugLifted logDebugExtended $ "Sent packet: " ++ show packet
 
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
@@ -139,7 +139,7 @@ sGetPacket s = do
     firstBytes <- decryptBytes dec firstBlock
     let (packlen, padlen) = getSizes firstBytes
         nextBytes = B.pack $ drop 5 firstBytes
-    printDebugLifted $ show (packlen, padlen)
+    printDebugLifted logLowLevelDebug $ show (packlen, padlen)
     let payloadRestSize = packlen - padlen - 1 - (smallSize - 5) -- -1 because we already read the padlen field.
         packetRestSize = payloadRestSize + padlen
     restBytes <- getBlock packetRestSize
@@ -151,12 +151,14 @@ sGetPacket s = do
         computedMac = macFun macKey toMacBytes
         macOK = macBytes == computedMac
 
-    printDebugLifted $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
+    if not macOK
+        then printDebugLifted logWarning "Received MAC NOT OK!"
+        else printDebugLifted logLowLevelDebug $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
 
     let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
 
-    printDebugLifted $ "Got packet: " ++ show packet
+    printDebugLifted logDebugExtended $ "Got packet: " ++ show packet
 
     MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
     return $ annotatePacketWithPayload packet payload
@@ -173,7 +175,7 @@ waitForPacket socket cond = do
             if cond packet
                 then return packet
                 else do
-                    printDebugLifted $ "Ignoring packet: " ++ show packet
+                    printDebugLifted logDebug $ "Ignoring packet: " ++ show packet
                     loop getter
 
 -- We decode the initial block

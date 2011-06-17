@@ -39,7 +39,7 @@ authenticate socket username service authServices = do
     -- TODO! it is possible that there is partial succes, etc, report that/do sth with that?
     where loopSupported []             = return False
           loopSupported (askPass:rest) = do
-            MS.liftIO $ printDebug $ "Trying authentication method " ++ (map (toEnum . fromEnum) $ B.unpack $ authenticationName askPass)
+            MS.liftIO $ printDebug logDebug $ "Trying authentication method " ++ (map (toEnum . fromEnum) $ B.unpack $ authenticationName askPass)
             ok <- doAuthenticate askPass socket username service
             case ok of
                 True  -> return True

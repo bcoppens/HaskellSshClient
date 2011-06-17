@@ -32,8 +32,7 @@ import Ssh.Transport
 import Ssh.HostKeyAlgorithm
 import Ssh.HashMac
 import Ssh.Debug
-
-type SshString = B.ByteString
+import Ssh.String
 
 data DHGroup = DHGroup {
       safePrime :: Integer
@@ -78,13 +77,13 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
     x <- MS.liftIO $ randIntegerOneToNMinusOne q
     let e = modexp g x p
         dhInit = KEXDHInit e
-    printDebugLifted $ show dhInit
+    printDebugLifted logLowLevelDebug $ show dhInit
     --MS.liftIO $ sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
     sPutPacket s dhInit
     dhReply <- getPacket s
-    printDebugLifted $ show dhReply
+    printDebugLifted logLowLevelDebug $ show dhReply
     newKeys <- getPacket s
-    printDebugLifted $ show newKeys
+    printDebugLifted logLowLevelDebug $ show newKeys
 
     let sharedSecret = dhComputeSharedSecret (dh_f dhReply) x p
         cvs = filterNewlines clientVersion
@@ -96,7 +95,7 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
         [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (take 128 . theMap . convert) ['A' .. 'F'] -- TODO take 128 -> the right value!
         -- TODO the session_id from the FIRST kex should remain the session_id for all future
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
-    printDebugLifted $ "Shared Secret: \n" ++ debugRawStringData sharedSecret
+    printDebugLifted logLowLevelDebug $ "Shared Secret: \n" ++ debugRawStringData sharedSecret
     case newKeys of
         NewKeys -> return cd
         _       -> error "Expected NEWKEYS"
