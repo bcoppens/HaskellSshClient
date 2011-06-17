@@ -8,6 +8,7 @@ module Ssh.Channel(
     , ChannelHandler(..)
     , GlobalChannelInfo(..)
     , openChannel
+    , handleChannel
     , initialGlobalChannelsState
     , getLocalChannelNr
 ) where
@@ -86,3 +87,26 @@ openChannel socket handler openInfo = do
     MS.put $ GlobalChannelInfo { usedChannels = used, freeChannels = free }
 
     return chanInfo
+
+-- | When data comes in for one of our channels, be sure to see to which one it is, and dispatch the payload data to it to update
+handleChannel :: Socket -> Packet -> Channels ChannelInfo
+handleChannel socket (ChannelData nr payload) = do
+    state <- MS.get
+
+    -- Which channel handler?
+    let info = Map.lookup nr $ usedChannels state
+    case info of
+        Just cInfo -> do
+            -- Let the handler do its stuff, get the result, update our map with the newly returned ChannelInfo, which can contain a brand new handler
+            let newChannel = channelHandler (channelInfoHandler cInfo) $ payload :: Channel ChannelInfo
+            (newChannelInfo, newState) <- MS.lift $ MS.runStateT newChannel cInfo
+            MS.modify $ \s -> s { usedChannels = Map.insert nr newChannelInfo $ usedChannels s }
+            return newState
+        Nothing    -> do
+            printDebugLifted logWarning $ "No handler found at lookup for channel " ++ show nr
+            return $ error "No handler!"
+-- TODO throw to lower level protocol handling functions!
+handleChannel _ p = do
+    state <- MS.get
+    printDebugLifted logDebugExtended "HandleChannel: ignored packet"
+    return $ error "Handle Channel: ignored packet"

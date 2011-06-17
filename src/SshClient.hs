@@ -12,6 +12,7 @@ import qualified Control.Monad.State as MS
 import Data.List
 import Data.Maybe
 import qualified Data.ByteString.Lazy as B
+import qualified Data.Map as Map
 
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
                    , hostAddress
@@ -72,12 +73,21 @@ clientLoop socket cd = do
     ti <- MS.get
     authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
-    (channel, newState) <- flip MS.runStateT initialGlobalChannelsState $ openChannel socket sessionHandler ""
-    newState' <- flip MS.evalStateT channel $ requestExec socket "cat /home/bartcopp/projecten/haskell/sshclient/README"
-    MS.evalStateT loop newState'
+
+    -- Open Channel
+    (channel, globalInfo) <- flip MS.runStateT initialGlobalChannelsState $ openChannel socket sessionHandler "" -- StateT GlobalChannelInfo SshConnection
+    -- Request Exec
+    (channel', newState') <- flip MS.runStateT channel $ requestExec socket "cat /home/bartcopp/projecten/haskell/sshclient/README" -- StateT ChannelInfo SshConnection
+    -- Update global channel info
+    let globalInfo' = globalInfo { usedChannels = Map.insert (channelLocalId channel) channel' $ usedChannels globalInfo }
+    -- Loop
+    MS.evalStateT loop globalInfo'
+    return $ error "Done with clientloop"
         where
+            loop :: Channels () -- StateT GlobalChannelInfo SshConnection
             loop = do
                 packet <- MS.lift $ sGetPacket socket
+                handleChannel socket packet
                 --MS.liftIO $ putStrLn $ show packet
                 loop
 
