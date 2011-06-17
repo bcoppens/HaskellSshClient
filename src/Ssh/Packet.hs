@@ -88,15 +88,15 @@ data Packet =
   }
   | RequestFailure -- 82
   | ChannelOpen { -- 90
-      clientChannelNr :: Int
-    , payload :: SshString
+      channelType :: SshString
+    , channelNr :: Int
     , initWindowSize :: Int
     , maxPacketSize :: Int
     , channelPayload :: SshString
   }
   | ChannelOpenConfirmation { -- 91
-      clientChannelNr :: Int
-    , channelNr :: Int
+      recipientChannelNr :: Int
+    , senderChannelNr :: Int
     , initWindowSize :: Int
     , maxPacjetSize :: Int
     , channelPayload :: SshString
@@ -182,6 +182,13 @@ putPacket (UserAuthRequest userName serviceName methodName payload) = do
     putString serviceName
     putString methodName
     putRawByteString payload
+putPacket (ChannelOpen channelType channelNr initWindowSize maxPacketSize channelPayload) = do
+    put (90 :: Word8)
+    putString channelType
+    putWord32 $ (toEnum . fromEnum) channelNr
+    putWord32 $ (toEnum . fromEnum) initWindowSize
+    putWord32 $ (toEnum . fromEnum) maxPacketSize
+    putRawByteString channelPayload
 
 -- | Can decode a 'Packet' from an 'SshBytestring' using 'runGet'
 getPacket :: Get Packet
@@ -226,6 +233,13 @@ getPacket = do
             banner <- getString
             lang   <- getString
             return $ UserAuthBanner banner lang
+        91 -> do -- ChannelOpenConfirmation
+            recipientChannelNr <- fromEnum `liftM` getWord32
+            senderChannelNr <- fromEnum `liftM` getWord32
+            initWindowSize <- fromEnum `liftM` getWord32
+            maxPacketSize <- fromEnum `liftM` getWord32
+            -- channelPayload TODO
+            return $ ChannelOpenConfirmation recipientChannelNr senderChannelNr initWindowSize maxPacketSize undefined
         _ -> error $ "unhandled getPacket, msg was " ++ show msg
 
 {-
