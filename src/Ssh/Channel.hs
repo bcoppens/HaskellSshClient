@@ -13,6 +13,7 @@ module Ssh.Channel(
     , insertChannel
     -- * Request actions related to 'Channel's
     , openChannel
+    , queueDataOverChannel
     , handleChannel
     , setChannelHandler
     -- * Miscelaneous
@@ -127,6 +128,26 @@ openChannel handler openInfo = do
     MS.put $ GlobalChannelInfo { usedChannels = used, freeChannels = free }
 
     return chanInfo
+
+
+-- TODO actually split/queue!
+-- | Queue payload to be sent over the channel indicated by 'ChannelInfo'.
+--   This data might be sent directly, or might be queued, or split, depending on how the size of the payload compares to the channel's
+--   'channelRemoteWindowSizeLeft' and 'channelRemotePacketSize'.
+queueDataOverChannel :: SshString -> ChannelInfo -> Channels ()
+queueDataOverChannel payload channel = do
+    let localChannel  = channelLocalId channel
+        remoteChannel = fromJust $ channelRemoteId channel
+        request       = ChannelData remoteChannel payload
+
+    -- Send the data
+    MS.lift $ sPutPacket request
+
+    -- We sent some bytes, which decreases the available window size of the remote
+    updateInfoWith localChannel $ \info -> info { channelRemoteWindowSizeLeft = Just $ (fromJust $ channelRemoteWindowSizeLeft info) - (fromIntegral $ B.length payload) }
+
+    return()
+
 
 -- | Get the 'ChannelInfo' with this local id, if it exists yet
 getChannel :: Int -> Channels (Maybe ChannelInfo)

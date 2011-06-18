@@ -7,6 +7,7 @@ module SshClient (
 import Network
 import Data.Binary.Put
 import Data.Word
+import Control.Concurrent
 import Control.Monad
 import qualified Control.Monad.State as MS
 import Data.List
@@ -75,15 +76,28 @@ clientLoop cd = do
     authOk <- authenticate "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
-    runGlobalChannelsToConnection initialGlobalChannelsState $ do
-        -- Open Channel
-        channel <- openChannel sessionHandler "" -- StateT GlobalChannelInfo SshConnection
-        -- Request Exec
-        insertChannel channel $ requestExec "cat /home/bartcopp/projecten/haskell/sshclient/README" -- StateT ChannelInfo SshConnection
-        -- Loop
-        loop
+    runGlobalChannelsToConnection initialGlobalChannelsState doShell -- demoExec
+    where
+      demoExec = do -- execute a command remotely, and show the result. As a test, execute cat /proc/cpuinfo
+        channel <- openChannel sessionHandler ""                -- Open a channel
+        insertChannel channel $ requestExec "cat /proc/cpuinfo" -- Request Exec
+        loop -- Loop
             where
-                loop :: Channels () -- StateT GlobalChannelInfo SshConnection
+                loop :: Channels ()
+                loop = do
+                    packet <- MS.lift $ sGetPacket
+                    handleChannel packet
+                    loop
+
+      doShell = do -- request a shell remotely
+        channel <- openChannel sessionHandler ""            -- Open a channel
+        globalInfo <- MS.get
+        connection <- MS.lift $ MS.get
+        safeInfo   <- MS.liftIO $ newMVar (globalInfo, connection)
+        insertChannel channel $ requestShell safeInfo -- Request a shell
+        loop -- Loop
+            where
+                loop :: Channels ()
                 loop = do
                     packet <- MS.lift $ sGetPacket
                     handleChannel packet
