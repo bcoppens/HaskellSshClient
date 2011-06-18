@@ -50,7 +50,8 @@ shellReadClientLoop channelId channelsLock = do
     let channelInfo = fromJust $ Map.lookup channelId (usedChannels globalInfo)
 
     -- globalinfo'!
-    transport' <- MS.execStateT (MS.execStateT (queueDataOverChannel "echo 'hoi'\n" channelInfo) globalInfo) transport
+    let command = runPut $ putString "echo 'hoi'\n"
+    transport' <- MS.execStateT (MS.execStateT (queueDataOverChannel command channelInfo) globalInfo) transport
 
     putMVar channelsLock (globalInfo, transport')
 
