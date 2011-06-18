@@ -34,8 +34,7 @@ import Ssh.HostKeyAlgorithm
 import Ssh.NetworkIO
 import Ssh.ConnectionData
 import Ssh.Debug
-
-type SshString = B.ByteString
+import Ssh.String
 
 -- | Information needed to encrypt and verify a packet in a single direction
 data SshTransport = SshTransport {
@@ -43,12 +42,12 @@ data SshTransport = SshTransport {
     , mac    :: HashMac
 } deriving Show
 
--- | The state of the SSH Transport info in two directions: server to client, and client to server
+-- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
-{-      kex_alg :: KeyExchangeAlgorithm
-    , serverhost_key_alg :: HostKeyAlgorithm
-
-    ,-} client2server :: SshTransport
+      socket :: Socket
+{-  , kex_alg :: KeyExchangeAlgorithm
+    , serverhost_key_alg :: HostKeyAlgorithm -}
+    , client2server :: SshTransport
     , clientVector :: [Word8]
     , clientSeq :: Int32
     , server2client :: SshTransport
@@ -98,13 +97,15 @@ makeSshPacket t payload = makeSshPacket' t payload $ B.pack $ replicate padLen n
 
 
 -- | Take a 'Packet', encode it to bytes that can be sent over the wire. Applies necessary encryption and MAC codes, and sends over the socket
-sPutPacket :: Socket -> ClientPacket -> SshConnection ()
-sPutPacket socket packet = do
+sPutPacket :: ClientPacket -> SshConnection ()
+sPutPacket packet = do
     transportInfo <- MS.get
-    let transport = client2server transportInfo
+    let sock = socket transportInfo
+        transport = client2server transportInfo
         rawPacket = makeSshPacket transport $ runPut $ putPacket packet
         bs = blockSize $ crypto $ client2server transportInfo
         enc = encrypt $ crypto $ client2server transportInfo
+        -- Compute the HMAC over prepending the sequence number before the encoded (but unencrypted) packet
         hmac = mac $ client2server transportInfo
         macLen = hashSize hmac
         macKeySize = hashKeySize hmac
@@ -113,37 +114,49 @@ sPutPacket socket packet = do
         cseq = runPut $ putWord32 $ (toEnum . fromEnum) $ clientSeq transportInfo
         macBytes = B.unpack $ B.append cseq rawPacket
         computedMac = macFun macKey macBytes
+
+    -- Encrypt packet, and send it. Send the HMAC afterwards
     encBytes <- encryptBytes $ B.unpack rawPacket
-    MS.liftIO $ sockWriteBytes socket $ B.pack encBytes
-    MS.liftIO $ sockWriteBytes socket $ B.pack computedMac
+    MS.liftIO $ sockWriteBytes sock $ B.pack encBytes
+    MS.liftIO $ sockWriteBytes sock $ B.pack computedMac
 
     printDebugLifted logDebugExtended $ "Sent packet: " ++ show packet
 
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
+
 -- | Read a packet from the socket, decrypt it/checks MAC if needed, and decodes into a real 'Packet'
-sGetPacket :: Socket -> SshConnection ServerPacket
-sGetPacket s = do
+sGetPacket :: SshConnection ServerPacket
+sGetPacket = do
     transportInfo <- MS.get
-    let transport = server2client transportInfo
+    let sock = socket transportInfo
+        transport = server2client transportInfo
         bs = blockSize $ crypto $ server2client transportInfo
         smallSize = max 5 bs -- We have to decode at least 5 bytes to read the sizes of this packet. We might need to decode more to take cipher size into account
-        getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes s size
+        getBlock size = MS.liftIO $ B.unpack `liftM` sockReadBytes sock size
         dec = decrypt $ crypto $ server2client transportInfo
+        -- HMAC tools
         hmac = mac $ server2client transportInfo
         macLen = hashSize hmac
         macKeySize = hashKeySize hmac
         macKey = take macKeySize $ server2ClientIntKey $ connectionData transportInfo
         macFun = hashFunction $ mac $ server2client transportInfo
+
+    -- Get and decrypt the first block of data from this packet, which contains the size fields
     firstBlock <- getBlock smallSize
     firstBytes <- decryptBytes dec firstBlock
     let (packlen, padlen) = getSizes firstBytes
         nextBytes = B.pack $ drop 5 firstBytes
+
     printDebugLifted logLowLevelDebug $ show (packlen, padlen)
+
+    -- Now get and decrypt the remainder of the packet (including padding!) using the decrypted size fields data
     let payloadRestSize = packlen - padlen - 1 - (smallSize - 5) -- -1 because we already read the padlen field.
         packetRestSize = payloadRestSize + padlen
     restBytes <- getBlock packetRestSize
     restBytesDecrypted <- decryptBytes dec $ restBytes
+
+    -- Compute the HMAC ourselves, and check if corresponds to the HMAC appended to the packet on the wire
     macBytes <- getBlock macLen
     let restPacketBytes = take payloadRestSize restBytesDecrypted
         sseq = runPut $ putWord32 $ (toEnum . fromEnum) $ serverSeq transportInfo
@@ -153,30 +166,34 @@ sGetPacket s = do
 
     if not macOK
         then printDebugLifted logWarning "Received MAC NOT OK!"
-        else printDebugLifted logLowLevelDebug $ "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes) ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
+        else printDebugLifted logLowLevelDebug $
+                "Got " ++ show macLen ++ " bytes of mac\n" ++ (debugRawStringData $ B.pack macBytes)
+                       ++ "\nComputed mac as:\n" ++ (debugRawStringData $ B.pack computedMac) ++ "\nMAC OK?? " ++ show macOK
 
+    -- Decode the packet from the payload data
     let payload = B.append nextBytes $ B.pack restPacketBytes
         packet = (runGet getPacket payload) :: ServerPacket
 
     printDebugLifted logDebugExtended $ "Got packet: " ++ show packet
 
     MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
+
     return $ annotatePacketWithPayload packet payload
+
 
 -- [!] TODO this should throw some ignored packets to a higher level (i.e. a rekeying request)!
 -- | Ignore all packets until one is found matching the condition, and return that
-waitForPacket :: Socket -> (Packet -> Bool) -> SshConnection Packet
-waitForPacket socket cond = do
-    let getter = sGetPacket socket
-    loop getter
+waitForPacket :: (Packet -> Bool) -> SshConnection Packet
+waitForPacket cond = do
+    loop
     where
-        loop getter = do
-            packet <- getter
+        loop = do
+            packet <- sGetPacket
             if cond packet
                 then return packet
                 else do
                     printDebugLifted logDebug $ "Ignoring packet: " ++ show packet
-                    loop getter
+                    loop
 
 -- We decode the initial block
 -- Packet Length is the lenght of the (encrypted, no mac added) packet, WITHOUT the packet_length field, WITH padding_length field!

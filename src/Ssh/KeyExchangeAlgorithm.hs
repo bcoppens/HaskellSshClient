@@ -4,8 +4,6 @@ module Ssh.KeyExchangeAlgorithm (
     , makeWord8
 ) where
 
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-
 import qualified Data.ByteString.Lazy as B
 import Data.ByteString.Lazy.Char8 () -- IsString instance for the above
 
@@ -15,12 +13,11 @@ import Data.Digest.Pure.SHA
 import Ssh.Packet
 import Ssh.Transport
 import Ssh.ConnectionData
-
-type SshString = B.ByteString
+import Ssh.String
 
 data KeyExchangeAlgorithm = KeyExchangeAlgorithm {
       kexName :: SshString
-    , handleKex :: SshString -> SshString -> SshString -> SshString -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
+    , handleKex :: SshString -> SshString -> SshString -> SshString -> SshConnection ConnectionData
 }
 
 instance Show KeyExchangeAlgorithm where

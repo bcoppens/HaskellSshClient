@@ -17,7 +17,8 @@ import qualified Data.Map as Map
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
                    , hostAddress
                    )
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
+import Network.Socket (Socket, SockAddr (..), SocketType (..), connect)
+import qualified Network.Socket (socket)
 import Network.Socket.ByteString.Lazy
 
 -- Non-'standard' functionality
@@ -41,11 +42,11 @@ import Ssh.Authentication.Password
 import Ssh.Debug
 import Ssh.Channel
 import Ssh.Channel.Session
+import Ssh.String
 
 import Debug.Trace
 debug = putStrLn
 
-type SshString = B.ByteString
 
 clientVersionString = "SSH-2.0-BartSSHaskell-0.0.1 This is crappy software!\r\n"
 
@@ -68,16 +69,16 @@ getServerVersionString s = do l <- sockReadLine s
 processPacket :: ServerPacket -> IO ()
 processPacket p = putStrLn $ "processPacket:" ++ show p
 
-clientLoop :: Socket -> ConnectionData -> SshConnection ()
-clientLoop socket cd = do
+clientLoop :: ConnectionData -> SshConnection ()
+clientLoop cd = do
     ti <- MS.get
-    authOk <- authenticate socket "bartcopp" "ssh-connection" [passwordAuth]
+    authOk <- authenticate "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
     -- Open Channel
-    (channel, globalInfo) <- flip MS.runStateT initialGlobalChannelsState $ openChannel socket sessionHandler "" -- StateT GlobalChannelInfo SshConnection
+    (channel, globalInfo) <- flip MS.runStateT initialGlobalChannelsState $ openChannel sessionHandler "" -- StateT GlobalChannelInfo SshConnection
     -- Request Exec
-    (channel', newState') <- flip MS.runStateT channel $ requestExec socket "cat /home/bartcopp/projecten/haskell/sshclient/README" -- StateT ChannelInfo SshConnection
+    (channel', newState') <- flip MS.runStateT channel $ requestExec "cat /home/bartcopp/projecten/haskell/sshclient/README" -- StateT ChannelInfo SshConnection
     -- Update global channel info
     let globalInfo' = globalInfo { usedChannels = Map.insert (channelLocalId channel) channel' $ usedChannels globalInfo }
     -- Loop
@@ -86,28 +87,38 @@ clientLoop socket cd = do
         where
             loop :: Channels () -- StateT GlobalChannelInfo SshConnection
             loop = do
-                packet <- MS.lift $ sGetPacket socket
-                handleChannel socket packet
+                packet <- MS.lift $ sGetPacket
+                handleChannel packet
                 --MS.liftIO $ putStrLn $ show packet
                 loop
 
 main :: IO ()
 main = do
+    -- Connect to the server
     connection <- connect' "localhost" 22
     --hSetBuffering connection $ BlockBuffering Nothing
+
+    -- Get the server's version string, send our version string
     serverVersion <- getServerVersionString connection
     printDebug logLowLevelDebug $ show serverVersion
     sendAll connection clientVersionString
+
     -- TODO remove runState!
-    let tinfo = SshTransportInfo {-(error "HKA")-} (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
-    (cd, newState) <- MS.runStateT (doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs connection sGetPacket) tinfo
-    MS.runStateT (clientLoop connection cd) newState
+    -- Do the Key Exchange, initialize the SshConnection
+    let tinfo = SshTransportInfo connection (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+    (cd, newState) <- flip MS.runStateT tinfo $
+        doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
+
+    -- Run the client loop, i.e. the real part
+    MS.runStateT (clientLoop cd) newState
+
+    -- We're done
     sClose connection
     where
       -- Higher-level connect function
       connect' hostname port = do
         protocol <- getProtocolNumber "tcp"
         entry <- getHostByName hostname
-        sock <- socket (hostFamily entry) Stream protocol
+        sock <- Network.Socket.socket (hostFamily entry) Stream protocol
         connect sock $ SockAddrInet (fromIntegral port) $ hostAddress entry
         return sock

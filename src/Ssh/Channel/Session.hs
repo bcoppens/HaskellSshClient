@@ -10,7 +10,6 @@ where
 import Data.Binary.Get
 import Data.Binary.Put
 
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
 import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
 
@@ -43,14 +42,14 @@ putSessionData (ExecRequest e) = do
 
 -- TODO: verify that this is an open "ssh-connection" channel?
 
--- | Given the socket, run the specified command remotely on this 'Channel'
-requestExec :: Socket -> SshString -> Channel ChannelInfo
-requestExec socket cmd = do
+-- | Given the 'Socket' in the 'Channel' state, run the specified command remotely on this 'Channel'
+requestExec :: SshString -> Channel ChannelInfo
+requestExec cmd = do
     -- Request the "exec" command on this channel
     nr <- getLocalChannelNr
     let requestData = runPut $ putSessionData $ ExecRequest cmd
         request = ChannelRequest nr "exec" True requestData
-    MS.lift $ sPutPacket socket request
+    MS.lift $ sPutPacket request
 
     -- update the channelinfo with the correct handler function to handle the data of this exec request
     s <- MS.get

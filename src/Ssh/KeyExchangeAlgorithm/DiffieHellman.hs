@@ -15,9 +15,6 @@ import qualified Control.Monad.State as MS
 import Data.Bits
 import qualified Data.ByteString.Lazy as B
 
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-import Network.Socket.ByteString.Lazy
-
 -- Non-'standard' functionality
 import OpenSSL.BN -- modexp, random Integers
 
@@ -70,32 +67,50 @@ filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r'
 
 --TODO use hash
 -- | Perform Diffie-Hellman key exchange
-diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> SshString -> (Socket -> SshConnection Packet) -> Socket -> SshConnection ConnectionData
-diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit rawServerKexInit getPacket s = do
+diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> SshString -> SshConnection ConnectionData
+diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit rawServerKexInit = do
     transportInfo <- MS.get
+
+    -- Compute and initialize the various DH parameters
     let q = (p - 1) `div` 2 -- let's *assume* this is the order of the subgroup?
     x <- MS.liftIO $ randIntegerOneToNMinusOne q
+
     let e = modexp g x p
         dhInit = KEXDHInit e
+
     printDebugLifted logLowLevelDebug $ show dhInit
-    --MS.liftIO $ sendAll s $ makeTransportPacket $ runPut $ putPacket dhInit
-    sPutPacket s dhInit
-    dhReply <- getPacket s
+
+    -- Send the packet with our initial DH parameters, and get their reply
+    sPutPacket dhInit
+    dhReply <- sGetPacket
+
     printDebugLifted logLowLevelDebug $ show dhReply
-    newKeys <- getPacket s
+
+    -- We expect the server to put into use the new keys and confirm that. So get their packet confirming that
+    newKeys <- sGetPacket
+
     printDebugLifted logLowLevelDebug $ show newKeys
 
+    -- Compute the shared secret
     let sharedSecret = dhComputeSharedSecret (dh_f dhReply) x p
         cvs = filterNewlines clientVersion
         svs = filterNewlines serverVersion
         hostKey = dh_hostKeyAndCerts dhReply -- AND certs? ###
+
+        -- With all this data, we can now compute the exchange hash
         exchangeHash = dhComputeExchangeHash {-hash-} cvs svs rawClientKexInit rawServerKexInit hostKey e (dh_f dhReply) sharedSecret
         sId = B.unpack exchangeHash
+
+        -- Compute the key data
         theMap = \c -> createKeyData sharedSecret exchangeHash c exchangeHash
         [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (take 128 . theMap . convert) ['A' .. 'F'] -- TODO take 128 -> the right value!
+
         -- TODO the session_id from the FIRST kex should remain the session_id for all future
+        -- Now we have all data that is computed in the key exchange, store this data
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
+
     printDebugLifted logLowLevelDebug $ "Shared Secret: \n" ++ debugRawStringData sharedSecret
+
     case newKeys of
         NewKeys -> return cd
         _       -> error "Expected NEWKEYS"

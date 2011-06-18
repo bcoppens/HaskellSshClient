@@ -13,8 +13,6 @@ module Ssh.Channel(
     , getLocalChannelNr
 ) where
 
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-
 import qualified Data.ByteString.Lazy as B
 import qualified Control.Monad.State as MS
 import qualified Data.Map as Map
@@ -63,9 +61,11 @@ initialGlobalChannelsState = GlobalChannelInfo Map.empty [0 .. 2^31]
 getLocalChannelNr :: Channel Int
 getLocalChannelNr = channelLocalId `fmap` MS.get
 
--- | Open a channel on the given socket, with a channel type, a handler, and initial information to put in the packet's payload
-openChannel :: Socket -> ChannelHandler -> SshString -> Channels ChannelInfo
-openChannel socket handler openInfo = do
+-- TODO: handle the open confirmation to map server ID to local ID!
+
+-- | Open a channel on the given 'SshConnection' given in the 'Channels' state, with a channel type, a handler, and initial information to put in the packet's payload
+openChannel :: ChannelHandler -> SshString -> Channels ChannelInfo
+openChannel handler openInfo = do
     state <- MS.get
 
     -- Get a new local channel nr
@@ -80,7 +80,8 @@ openChannel socket handler openInfo = do
         chanInfo = ChannelInfo local remote False ws ps handler
         openRequest = ChannelOpen name local ws ps openInfo
 
-    MS.lift $ sPutPacket socket openRequest
+    -- Request to open the channel
+    MS.lift $ sPutPacket openRequest
 
     let used  = Map.insert local chanInfo $ usedChannels state
 
@@ -89,8 +90,8 @@ openChannel socket handler openInfo = do
     return chanInfo
 
 -- | When data comes in for one of our channels, be sure to see to which one it is, and dispatch the payload data to it to update
-handleChannel :: Socket -> Packet -> Channels ChannelInfo
-handleChannel socket (ChannelData nr payload) = do
+handleChannel :: Packet -> Channels ChannelInfo
+handleChannel (ChannelData nr payload) = do
     state <- MS.get
 
     -- Which channel handler?
@@ -105,8 +106,9 @@ handleChannel socket (ChannelData nr payload) = do
         Nothing    -> do
             printDebugLifted logWarning $ "No handler found at lookup for channel " ++ show nr
             return $ error "No handler!"
+
 -- TODO throw to lower level protocol handling functions!
-handleChannel _ p = do
+handleChannel p = do
     state <- MS.get
     printDebugLifted logDebugExtended "HandleChannel: ignored packet"
     return $ error "Handle Channel: ignored packet"

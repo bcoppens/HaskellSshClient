@@ -17,9 +17,6 @@ import Data.Maybe
 import Data.List
 import qualified Data.ByteString.Lazy as B
 
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
-import Network.Socket.ByteString.Lazy
-
 -- Non-'standard' functionality
 import OpenSSL.BN -- modexp, random Integers
 
@@ -55,29 +52,47 @@ filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHa
 
 -- | Perform key exchange
 --   Needs the version strings of both client and server. Needs a list of all client-side supported algorithms.
---   We also need a socket to perform the key exchange on, and a function that can be used to decode and decrypt packets using a given 'Transport'.
-doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Socket -> (Socket -> SshConnection ServerPacket) -> SshConnection ConnectionData
-doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs s getPacket = do
+--   We also need a function that can be used to decode and decrypt packets using a given 'Transport'.
+--
+doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection ConnectionData
+doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
     --cookie <- fmap (fromInteger . toInteger) $ replicateM 16 $ (randomRIO (0, 255 :: Int)) :: IO [Word8]
+
+    -- Prepare our KEXInit packet
     let cookie = replicate 16 (-1 :: Word8) -- TODO random
     let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
+
+    -- Set up the transports
     let initialTransport     = SshTransport noCrypto noHashMac -- TODO this should only be initialized for the *first* Kex, not for rekeying!
         clientKexInitPayload = runPut $ putPacket clientKex
         clientKexPacket      = makeSshPacket initialTransport $ clientKexInitPayload
+
+    -- Initialize the state to be able to send packets
     MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
-    sPutPacket s clientKex
-    serverKex <- getPacket s
+
+    -- Send our KEXInit, wait for their KEXInit
+    sPutPacket clientKex
+    serverKex <- sGetPacket -- TODO assert this is a KEXInit packet
+
     printDebugLifted logLowLevelDebug "ServerKEX before filtering:"
     printDebugLifted logLowLevelDebug $ show serverKex
-    -- assert KEXInit packet
+
+    -- The server's KEXInit probably contains a lot of methods we don't support, throw them away, and get the first KEX method we and the server support
     let filteredServerKex = filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs serverKex
         kex   = head $ kex_algos filteredServerKex
         kexFn = fromJust $ find (\x -> kexName x == kex) clientKEXAlgos
         serverKexInitPayload = rawPacket serverKex
+
     printDebugLifted logLowLevelDebug "ServerKEX after filtering:"
     printDebugLifted logLowLevelDebug $ show filteredServerKex
-    connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload getPacket s
-    sPutPacket s NewKeys
+
+    -- Perform the Key Exchange method supported by both us and the server
+    connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload
+
+    -- We have exchanged keys, confirm to the server that the new keys can be put into use. The handleKex already confirmed the server sent theirs!
+    sPutPacket NewKeys
+
+    -- Now that the new keys are put into use, set up these keys and the correct encryption, decryption and hashed mac functions in our state to use
     let s2c    = head $ enc_s2c filteredServerKex
         s2cfun = fromJust $ find (\x -> cryptoName x == s2c) serverCryptos
         s2cmac = head $ mac_s2c filteredServerKex
@@ -86,11 +101,14 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
         c2sfun = fromJust $ find (\x -> cryptoName x == c2s) serverCryptos
         c2smac = head $ mac_c2s filteredServerKex
         c2smacfun = fromJust $ find (\x -> hashName x == c2smac) serverHashMacs
+
     MS.modify $ \s -> s { server2client = SshTransport s2cfun s2cmacfun,
                           serverVector = server2ClientIV connectiondata,
                           client2server = SshTransport c2sfun s2cmacfun,
                           clientVector = client2ServerIV connectiondata,
                           connectionData = connectiondata
                          }
+
     printDebugLifted logLowLevelDebug "KEX DONE?"
+
     return connectiondata

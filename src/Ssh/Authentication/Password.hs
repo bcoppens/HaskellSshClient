@@ -7,7 +7,7 @@ module Ssh.Authentication.Password (
 
 import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
-import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
+
 import Data.Binary.Put
 import Control.Monad
 
@@ -19,8 +19,7 @@ import Ssh.Packet
 import Ssh.NetworkIO
 import Ssh.Transport
 import Ssh.Authentication
-
-type SshString = B.ByteString
+import Ssh.String
 
 passwordAuth = AuthenticationService "password" doAuth
 
@@ -31,12 +30,14 @@ userAuthPayload pwd = runPut $ do -- pws should be UTF-8 encoded!
 
 -- TODO: password authentication SHOULD be disabled when no confidentiality (cipher == none) or no mac are used!
 -- TODO: handle SSH_MSG_USERAUTH_PASSWD_CHANGEREQ?
-doAuth :: Socket -> SshString -> SshString -> SshConnection Bool
-doAuth socket username servicename = do
+doAuth :: SshString -> SshString -> SshConnection Bool
+doAuth username servicename = do
     pwd <- MS.liftIO $ askPassword username
     let payload = userAuthPayload pwd
-    sPutPacket socket $ UserAuthRequest username servicename "password" payload
-    response <- sGetPacket socket
+
+    sPutPacket $ UserAuthRequest username servicename "password" payload
+    response <- sGetPacket
+
     return $ case response of
         UserAuthSuccess -> True
         _               -> False
