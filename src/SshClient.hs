@@ -75,22 +75,19 @@ clientLoop cd = do
     authOk <- authenticate "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
-    -- Open Channel
-    (channel, globalInfo) <- flip MS.runStateT initialGlobalChannelsState $ openChannel sessionHandler "" -- StateT GlobalChannelInfo SshConnection
-    -- Request Exec
-    (channel', newState') <- flip MS.runStateT channel $ requestExec "cat /home/bartcopp/projecten/haskell/sshclient/README" -- StateT ChannelInfo SshConnection
-    -- Update global channel info
-    let globalInfo' = globalInfo { usedChannels = Map.insert (channelLocalId channel) channel' $ usedChannels globalInfo }
-    -- Loop
-    MS.evalStateT loop globalInfo'
-    return $ error "Done with clientloop"
-        where
-            loop :: Channels () -- StateT GlobalChannelInfo SshConnection
-            loop = do
-                packet <- MS.lift $ sGetPacket
-                handleChannel packet
-                --MS.liftIO $ putStrLn $ show packet
-                loop
+    runGlobalChannelsToConnection initialGlobalChannelsState $ do
+        -- Open Channel
+        channel <- openChannel sessionHandler "" -- StateT GlobalChannelInfo SshConnection
+        -- Request Exec
+        insertChannel channel $ requestExec "cat /home/bartcopp/projecten/haskell/sshclient/README" -- StateT ChannelInfo SshConnection
+        -- Loop
+        loop
+            where
+                loop :: Channels () -- StateT GlobalChannelInfo SshConnection
+                loop = do
+                    packet <- MS.lift $ sGetPacket
+                    handleChannel packet
+                    loop
 
 main :: IO ()
 main = do

@@ -2,13 +2,19 @@
 
 -- | Implements the generic part of the SSH Connection Protocol (RFC 4254).
 module Ssh.Channel(
+    -- * Data structures
       ChannelInfo(..)
     , Channel(..)
     , Channels(..)
     , ChannelHandler(..)
     , GlobalChannelInfo(..)
+    -- * Perform actions on a 'Channel'
+    , runGlobalChannelsToConnection
+    , insertChannel
+    -- * Request actions related to 'Channel's
     , openChannel
     , handleChannel
+    -- * Miscelaneous
     , initialGlobalChannelsState
     , getLocalChannelNr
 ) where
@@ -57,9 +63,27 @@ type Channels = MS.StateT GlobalChannelInfo SshConnection
 
 initialGlobalChannelsState = GlobalChannelInfo Map.empty [0 .. 2^31]
 
+
+-- | Run the action of 'Channels ChannelInfo' on the initial 'GlobalChannelInfo', and at the end just return the resulting connection. Can be used for
+--   an execution loop, after which the connection should be closed
+runGlobalChannelsToConnection :: GlobalChannelInfo -> Channels a -> SshConnection ()
+runGlobalChannelsToConnection state action = do
+    MS.runStateT action state
+    return ()
+
+-- | Run the 'Channel ChannelInfo' action on the channel with the specified 'ChannelInfo', get the resulting info and update it in our 'Channels' state
+insertChannel :: ChannelInfo -> Channel ChannelInfo -> Channels ()
+insertChannel channel action = do
+    newChannelInfo <- MS.lift $ MS.evalStateT action channel
+    let channelNr = channelLocalId channel
+    modifyUsedChannel channelNr newChannelInfo
+
 -- | Get the local channel number of a Channel
 getLocalChannelNr :: Channel Int
 getLocalChannelNr = channelLocalId `fmap` MS.get
+
+modifyUsedChannel :: Int -> ChannelInfo -> Channels ()
+modifyUsedChannel chanNr newChannelInfo = MS.modify $ \s -> s { usedChannels = Map.insert chanNr newChannelInfo $ usedChannels s }
 
 -- TODO: handle the open confirmation to map server ID to local ID!
 
@@ -101,7 +125,7 @@ handleChannel (ChannelData nr payload) = do
             -- Let the handler do its stuff, get the result, update our map with the newly returned ChannelInfo, which can contain a brand new handler
             let newChannel = channelHandler (channelInfoHandler cInfo) $ payload :: Channel ChannelInfo
             (newChannelInfo, newState) <- MS.lift $ MS.runStateT newChannel cInfo
-            MS.modify $ \s -> s { usedChannels = Map.insert nr newChannelInfo $ usedChannels s }
+            modifyUsedChannel nr newChannelInfo
             return newState
         Nothing    -> do
             printDebugLifted logWarning $ "No handler found at lookup for channel " ++ show nr
