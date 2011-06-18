@@ -184,6 +184,17 @@ handleChannel (ChannelClose nr) = do
     info <- fromJust `liftM` getChannel nr
     return info
 
+-- Extended data can be stuff like standard error
+handleChannel (ChannelExtendedData nr code payload) = do
+    case code of
+        1 -> -- SSH_EXTENDED_DATA_STDERR
+            -- TODO: handle with handler?
+            MS.liftIO $ putStrLn $ "Server sent back on standard error: " ++ (map (toEnum . fromEnum) $ B.unpack payload)
+        _ ->
+            printDebugLifted logWarning $ "Unknown channel data type: " ++ show code
+    info <- fromJust `liftM` getChannel nr
+    return info
+
 -- When data comes in for one of our channels, be sure to see to which one it is, and dispatch the payload data to it to update
 handleChannel (ChannelData nr payload) = do
     state <- MS.get
