@@ -11,7 +11,7 @@ import Data.Binary.Put
 import Control.Concurrent
 import Data.Maybe
 
-import System.Posix.Unistd
+import System.Posix.IO
 
 import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
@@ -42,23 +42,40 @@ requestShell minfo = do
 
     return info
 
+-- | The main loop
 shellReadClientLoop :: Int -> MVar (GlobalChannelInfo, SshTransportInfo) -> IO ()
 shellReadClientLoop channelId channelsLock = do
+    -- Wait until the channel has been set up correctly from the server's side
     threadDelay 1000000 -- TODO
+
+    userReadLoop channelId channelsLock
+
+-- | Wait for the user to write data on standard input, and send that over
+userReadLoop :: Int -> MVar (GlobalChannelInfo, SshTransportInfo) -> IO ()
+userReadLoop channelId channelsLock = do
+    -- Sleep until the user enters something on standard input:
+    (byte, nrRead) <- fdRead stdInput 1
+
+    -- We're going to send this byte! So first of all, lock the state
     (globalInfo, transport) <- MS.liftIO $ takeMVar channelsLock
 
+    -- Which channel is this again?
     let channelInfo = fromJust $ Map.lookup channelId (usedChannels globalInfo)
 
-    -- globalinfo'!
-    let command = runPut $ putString "echo 'hoi'\n"
-    transport' <- MS.execStateT (MS.execStateT (queueDataOverChannel command channelInfo) globalInfo) transport
+    -- Send the byte encoded to the server
+    let packedData = runPut $ putString $ B.pack $ map (toEnum . fromEnum) byte
+    transport' <- MS.execStateT (MS.execStateT (queueDataOverChannel packedData channelInfo) globalInfo) transport -- TODO: what if globalinfo! changes
 
+    -- We're done, unlock the state
     putMVar channelsLock (globalInfo, transport')
+
+    -- Loop!
+    userReadLoop channelId channelsLock
 
 -- | Handle a shell request
 handleShellRequest :: MVar (GlobalChannelInfo, SshTransportInfo) -> SshString -> Channel ChannelInfo
 handleShellRequest channelsLock payload = do
-    printDebugLifted logDebug "This is the result of a shell request:"
+    --printDebugLifted logDebug "This is the result of a shell request:"
     let raw = B.unpack payload
     MS.liftIO $ putStr $ map (toEnum . fromEnum) raw
     MS.get >>= return
