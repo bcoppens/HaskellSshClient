@@ -14,6 +14,7 @@ module Ssh.Channel(
     -- * Request actions related to 'Channel's
     , openChannel
     , handleChannel
+    , setChannelHandler
     -- * Miscelaneous
     , initialGlobalChannelsState
     , getLocalChannelNr
@@ -67,6 +68,15 @@ data GlobalChannelInfo = GlobalChannelInfo {
 type Channels = MS.StateT GlobalChannelInfo SshConnection
 
 initialGlobalChannelsState = GlobalChannelInfo Map.empty [0 .. 2^31]
+
+-- | Set the handler for a channel
+setChannelHandler :: (SshString -> Channel ChannelInfo) -> Channel ChannelInfo
+setChannelHandler handler = do
+    s <- MS.get
+    let cih  = channelInfoHandler s
+        cih' = cih { channelHandler = handler }
+        ret  = s { channelInfoHandler = cih' }
+    return $ ret
 
 
 -- | Run the action of 'Channels ChannelInfo' on the initial 'GlobalChannelInfo', and at the end just return the resulting connection. Can be used for
