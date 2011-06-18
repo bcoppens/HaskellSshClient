@@ -15,10 +15,13 @@ import Data.Maybe
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Map as Map
 
+import System.IO
+import GHC.IO.Handle
+
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
                    , hostAddress
                    )
-import Network.Socket (Socket, SockAddr (..), SocketType (..), connect)
+import Network.Socket (Socket, SockAddr (..), SocketType (..), connect, socketToHandle)
 import qualified Network.Socket (socket)
 import Network.Socket.ByteString.Lazy
 
@@ -76,7 +79,7 @@ clientLoop cd = do
     authOk <- authenticate "bartcopp" "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
-    runGlobalChannelsToConnection initialGlobalChannelsState doShell -- demoExec
+    runGlobalChannelsToConnection initialGlobalChannelsState (doShell ti) -- demoExec
     where
       demoExec = do -- execute a command remotely, and show the result. As a test, execute cat /proc/cpuinfo
         channel <- openChannel sessionHandler ""                -- Open a channel
@@ -89,19 +92,32 @@ clientLoop cd = do
                     handleChannel packet
                     loop
 
-      doShell = do -- request a shell remotely
+      doShell ti = do -- request a shell remotely
         channel <- openChannel sessionHandler ""            -- Open a channel
+        safeInfo   <- MS.liftIO $ newEmptyMVar
+        insertChannel channel $ requestShell safeInfo -- Request a shell
+
         globalInfo <- MS.get
         connection <- MS.lift $ MS.get
-        safeInfo   <- MS.liftIO $ newMVar (globalInfo, connection)
-        insertChannel channel $ requestShell safeInfo -- Request a shell
-        loop -- Loop
+        MS.liftIO $ putMVar safeInfo (globalInfo, connection)
+
+        handle <- MS.liftIO $ socketToHandle (socket ti) ReadWriteMode
+
+        loop safeInfo handle -- Loop
             where
-                loop :: Channels ()
-                loop = do
+                loop safeInfo handle = do
+                    b <- MS.liftIO $ hWaitForInput handle $ -1
+                    info <- MS.liftIO $ takeMVar safeInfo
                     packet <- MS.lift $ sGetPacket
+
                     handleChannel packet
-                    loop
+
+                    globalInfo <- MS.get
+                    connection <- MS.lift $ MS.get
+
+                    MS.liftIO $ putMVar safeInfo (globalInfo, connection)
+
+                    loop safeInfo handle
 
 main :: IO ()
 main = do

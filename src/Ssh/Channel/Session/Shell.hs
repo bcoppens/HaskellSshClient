@@ -11,6 +11,8 @@ import Data.Binary.Put
 import Control.Concurrent
 import Data.Maybe
 
+import System.Posix.Unistd
+
 import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Map as Map
@@ -42,6 +44,7 @@ requestShell minfo = do
 
 shellReadClientLoop :: Int -> MVar (GlobalChannelInfo, SshTransportInfo) -> IO ()
 shellReadClientLoop channelId channelsLock = do
+    threadDelay 1000000 -- TODO
     (globalInfo, transport) <- MS.liftIO $ takeMVar channelsLock
 
     let channelInfo = fromJust $ Map.lookup channelId (usedChannels globalInfo)
