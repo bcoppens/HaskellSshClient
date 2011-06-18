@@ -101,23 +101,21 @@ clientLoop cd = do
         connection <- MS.lift $ MS.get
         MS.liftIO $ putMVar safeInfo (globalInfo, connection)
 
-        handle <- MS.liftIO $ socketToHandle (socket ti) ReadWriteMode
+        let sshSocket = socket connection
 
-        loop safeInfo handle -- Loop
+        loop safeInfo sshSocket -- Loop
             where
-                loop safeInfo handle = do
-                    b <- MS.liftIO $ hWaitForInput handle $ -1
+                loop safeInfo sshSocket = do
+                    MS.liftIO $ waitForSockInput sshSocket
                     info <- MS.liftIO $ takeMVar safeInfo
                     packet <- MS.lift $ sGetPacket
-
                     handleChannel packet
 
                     globalInfo <- MS.get
                     connection <- MS.lift $ MS.get
-
                     MS.liftIO $ putMVar safeInfo (globalInfo, connection)
 
-                    loop safeInfo handle
+                    loop safeInfo sshSocket
 
 main :: IO ()
 main = do
@@ -132,7 +130,8 @@ main = do
 
     -- TODO remove runState!
     -- Do the Key Exchange, initialize the SshConnection
-    let tinfo = SshTransportInfo connection (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+    sshSock <- mkSocket connection
+    let tinfo = SshTransportInfo sshSock (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
     (cd, newState) <- flip MS.runStateT tinfo $
         doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
 

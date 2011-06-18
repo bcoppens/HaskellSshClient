@@ -44,7 +44,7 @@ data SshTransport = SshTransport {
 
 -- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
-      socket :: Socket
+      socket :: SshSocket
 {-  , kex_alg :: KeyExchangeAlgorithm
     , serverhost_key_alg :: HostKeyAlgorithm -}
     , client2server :: SshTransport

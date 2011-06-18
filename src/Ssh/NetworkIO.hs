@@ -2,8 +2,11 @@
 
 module Ssh.NetworkIO (
       NameList(..)
+    , SshSocket
+    , mkSocket
     , sockReadLine
     , sockReadBytes
+    , waitForSockInput
     , sockWriteBytes
     , encodeAsWord32
     , encodeAsWord8
@@ -27,11 +30,13 @@ import Network.Socket (Socket, SockAddr (..), SocketType (..), socket, connect)
 import Network.Socket.ByteString.Lazy
 
 import Control.Monad
+import Control.Concurrent
 import qualified Control.Monad.State as MS
 import Data.Monoid
 import Data.Bits
 import Data.Int
 import Data.Char
+import Data.Maybe
 
 import qualified Data.ByteString.Lazy as B
 import Data.ByteString.Lazy.Char8 () -- IsString instance for the above
@@ -40,16 +45,42 @@ import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
 
+import Ssh.String
 
-type SshString = B.ByteString
+data SshSocket = SshSocket {
+      _socket :: Socket
+    , _fstBytes :: MVar (Maybe Word8)
+}
 
+instance Show SshSocket where
+    show s = show $ _socket s
 
-sockReadBytes :: Socket -> Int -> IO B.ByteString
-sockReadBytes s c = rrb s (fromIntegral c) mempty
-    where
-        rrb :: Socket -> Int64 -> B.ByteString -> IO B.ByteString
-        rrb sock cnt str | B.length str < fromIntegral cnt = recv sock cnt >>= \got -> rrb sock cnt (B.append str got)
-                         | otherwise                       = return str
+mkSocket :: Socket -> IO SshSocket
+mkSocket s = do
+    mvar <- newMVar Nothing
+    return $ SshSocket s mvar
+
+waitForSockInput :: SshSocket -> IO ()
+waitForSockInput (SshSocket s fb) = do
+    maybeByte <- takeMVar fb
+    case maybeByte of
+        Just c  -> error "waitForSockInput"
+        Nothing -> do
+            byte <- B.head `liftM` rrb s 1 mempty
+            putMVar fb $ Just byte
+
+sockReadBytes :: SshSocket -> Int -> IO B.ByteString
+sockReadBytes (SshSocket s fb) c = do
+    maybeByte <- takeMVar fb
+    putMVar fb Nothing
+    ret <- case maybeByte of
+        Nothing   -> rrb s (fromIntegral c) mempty
+        Just byte -> (B.cons byte) `liftM` rrb s (-1 + fromIntegral c) mempty
+    return ret
+
+rrb :: Socket -> Int64 -> B.ByteString -> IO B.ByteString
+rrb sock cnt str | B.length str < fromIntegral cnt = recv sock cnt >>= \got -> rrb sock cnt (B.append str got)
+                 | otherwise                       = return str
 
 sockReadLine' :: Socket -> B.ByteString -> IO B.ByteString
 sockReadLine' socket string = do
@@ -61,8 +92,8 @@ sockReadLine' socket string = do
 sockReadLine :: Socket -> IO B.ByteString
 sockReadLine s = sockReadLine' s mempty
 
-sockWriteBytes :: Socket -> B.ByteString -> IO ()
-sockWriteBytes = sendAll
+sockWriteBytes :: SshSocket -> B.ByteString -> IO ()
+sockWriteBytes = sendAll . _socket
 
 encodeAsWord32 i = fromInteger $ toInteger i :: Word32
 encodeAsWord8 i = fromInteger $ toInteger i :: Word8
