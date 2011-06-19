@@ -273,12 +273,12 @@ getPacket = do
             return $ ChannelWindowAdjust channelNr bytesToAdd
         94 -> do -- ChannelData
             channelNr <- fromEnum `liftM` getWord32
-            channelPayload <- getRemainingLazyByteString
+            channelPayload <- getString
             return $ ChannelData channelNr channelPayload
         95 -> do -- ChannelExtendedData
             channelNr <- fromEnum `liftM` getWord32
             extendedDataTypeCode <- fromEnum `liftM` getWord32
-            channelPayload <- getRemainingLazyByteString
+            channelPayload <- getString
             return $ ChannelExtendedData channelNr extendedDataTypeCode channelPayload
         96 -> do -- ChannelEof
             channelNr <- fromEnum `liftM` getWord32
