@@ -16,6 +16,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.Map as Map
 
 import System.IO
+import System.Environment
 import GHC.IO.Handle
 
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
@@ -73,10 +74,37 @@ getServerVersionString s = do l <- sockReadLine s
 processPacket :: ServerPacket -> IO ()
 processPacket p = putStrLn $ "processPacket:" ++ show p
 
-clientLoop :: ConnectionData -> SshConnection ()
-clientLoop cd = do
+-- TODO: get port!
+-- | Parse commandline argument for username@hostname. If just hostname is specified, get username from USER environment variable.
+--   If no commandline argument is given, use bartcopp@localhost for debugging purposes
+--   Returns (username, hostname). Since we first resolve the hostname, that's a regular 'String', since we'll send the username, that's an 'SshString'
+getUserAndHostNameFromArguments :: IO (SshString, String)
+getUserAndHostNameFromArguments = do
+    args <- getArgs
+    if null args
+        then return ("bartcopp", "localhost")
+        else parseUserAndHostName $ head args
+
+-- | Parses argument & returns username@hostname info like documented in 'getUserAndHostNameFromArguments'
+parseUserAndHostName :: String -> IO (SshString, String)
+parseUserAndHostName s = do
+    let (left, right) = break (== '@') s
+
+    -- If it contains no @, the right is empty, and the left is the hostname. Get the username
+    if null right
+        then do
+            username <- getEnv "USER" -- TODO: can fail!?
+            return (B.pack $ convert username, left)
+        else
+            return (B.pack $ convert left, drop 1 right) -- drop the @ from the hostname
+
+        where
+            convert = map (toEnum . fromEnum)
+
+clientLoop :: SshString -> SshString -> ConnectionData -> SshConnection ()
+clientLoop username hostname cd = do
     ti <- MS.get
-    authOk <- authenticate "bartcopp" "ssh-connection" [passwordAuth]
+    authOk <- authenticate username "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
     runGlobalChannelsToConnection initialGlobalChannelsState (doShell ti) -- demoExec
@@ -130,8 +158,11 @@ clientLoop cd = do
 
 main :: IO ()
 main = do
+    -- Get username and hostname
+    (username, hostname) <- getUserAndHostNameFromArguments
+
     -- Connect to the server
-    connection <- connect' "localhost" 22
+    connection <- connect' hostname 22
     --hSetBuffering connection $ BlockBuffering Nothing
 
     -- Get the server's version string, send our version string
@@ -147,7 +178,7 @@ main = do
         doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
 
     -- Run the client loop, i.e. the real part
-    MS.runStateT (clientLoop cd) newState
+    MS.runStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) cd) newState
 
     -- We're done
     sClose connection
