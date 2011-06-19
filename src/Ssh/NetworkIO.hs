@@ -1,13 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Low-level Network I/O functionality, including reading from a socket, and encoding/decoding basic SSH data types
 module Ssh.NetworkIO (
+    -- * Name list
       NameList(..)
+    -- * Custom Socket type
     , SshSocket
     , mkSocket
+    -- * Reading/Writing a Socket
     , sockReadLine
     , sockReadBytes
     , waitForSockInput
     , sockWriteBytes
+    -- * Encoding and decoding of SSH data types with 'Data.Binary.Put' and 'Data.Binary.Get'
     , encodeAsWord32
     , encodeAsWord8
     , putRawByteString
@@ -47,6 +52,7 @@ import Data.Binary.Put
 
 import Ssh.String
 
+-- | Custom Socket wrapper type. Needed to implement 'waitForSockInput'
 data SshSocket = SshSocket {
       _socket :: Socket
     , _fstBytes :: MVar (Maybe Word8)
@@ -55,11 +61,13 @@ data SshSocket = SshSocket {
 instance Show SshSocket where
     show s = show $ _socket s
 
+-- | Wrap a regular 'Socket' into our 'SshSocket' type
 mkSocket :: Socket -> IO SshSocket
 mkSocket s = do
     mvar <- newMVar Nothing
     return $ SshSocket s mvar
 
+-- | Given an 'SshSocket', block until there is input on it
 waitForSockInput :: SshSocket -> IO ()
 waitForSockInput (SshSocket s fb) = do
     maybeByte <- takeMVar fb
@@ -69,6 +77,7 @@ waitForSockInput (SshSocket s fb) = do
             byte <- B.head `liftM` rrb s 1 mempty
             putMVar fb $ Just byte
 
+-- | Read a number of bytes of input from the socket
 sockReadBytes :: SshSocket -> Int -> IO B.ByteString
 sockReadBytes (SshSocket s fb) c = do
     maybeByte <- takeMVar fb
@@ -78,6 +87,7 @@ sockReadBytes (SshSocket s fb) c = do
         Just byte -> (B.cons byte) `liftM` rrb s (-1 + fromIntegral c) mempty
     return ret
 
+-- | Helper function for 'sockReadBytes', reading in the right number of bytes from the socket, looping if needed
 rrb :: Socket -> Int64 -> B.ByteString -> IO B.ByteString
 rrb sock cnt str | B.length str < fromIntegral cnt = recv sock cnt >>= \got -> rrb sock cnt (B.append str got)
                  | otherwise                       = return str
@@ -89,20 +99,24 @@ sockReadLine' socket string = do
         then return string
         else sockReadLine' socket $ B.append string got
 
+-- | Read a whole line (ended by a newline) from a (regular) 'Socket'
 sockReadLine :: Socket -> IO B.ByteString
 sockReadLine s = sockReadLine' s mempty
 
+-- | Write bytes to a 'SshSocket'
 sockWriteBytes :: SshSocket -> B.ByteString -> IO ()
 sockWriteBytes = sendAll . _socket
 
 encodeAsWord32 i = fromInteger $ toInteger i :: Word32
 encodeAsWord8 i = fromInteger $ toInteger i :: Word8
 
+-- | Encode an 'SshString' as raw bytes, that is: without prepending the length in bytes as 'putString' would do for a 'string' data type in the SSH spec
 putRawByteString b = forM_ (B.unpack b) (put :: Word8 -> Put)
 
 getWord32 = getWord32be
 putWord32 = putWord32be
 
+-- | A list of 'SshString's, used a lot in the Key Exchange to exchange lists of supported methods
 data NameList = NameList {
     names :: [SshString]
 }
