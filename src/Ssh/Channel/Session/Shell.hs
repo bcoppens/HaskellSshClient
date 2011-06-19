@@ -42,17 +42,10 @@ requestShell minfo = do
 
     return info
 
--- | The main loop
+-- | The main loop. Wait for the user to write data on standard input, and send that over
+--   Since we queue the data, 'Channel' will automatically queue our data, and send it over once the channel has been set up and the window size large enough.
 shellReadClientLoop :: Int -> MVar (GlobalChannelInfo, SshTransportInfo) -> IO ()
 shellReadClientLoop channelId channelsLock = do
-    -- Wait until the channel has been set up correctly from the server's side
-    threadDelay 1000000 -- TODO
-
-    userReadLoop channelId channelsLock
-
--- | Wait for the user to write data on standard input, and send that over
-userReadLoop :: Int -> MVar (GlobalChannelInfo, SshTransportInfo) -> IO ()
-userReadLoop channelId channelsLock = do
     -- Sleep until the user enters something on standard input:
     (byte, nrRead) <- fdRead stdInput 1
 
@@ -63,16 +56,18 @@ userReadLoop channelId channelsLock = do
     let channelInfo = fromJust $ Map.lookup channelId (usedChannels globalInfo)
 
     -- Send the byte encoded to the server
-    let packedData = runPut $ putString $ B.pack $ map (toEnum . fromEnum) byte
-    transport' <- MS.execStateT (MS.execStateT (queueDataOverChannel packedData channelInfo) globalInfo) transport -- TODO: what if globalinfo! changes
+    let packedData  = runPut $ putString $ B.pack $ map (toEnum . fromEnum) byte                  -- Pack the data to be sent
 
-    -- We're done, unlock the state
-    putMVar channelsLock (globalInfo, transport')
+    let globalInfoAction = MS.execStateT (queueDataOverChannel packedData channelInfo) globalInfo -- SshConnection action updating/returning the new globalInfo
+    (globalInfo', transport') <- MS.runStateT globalInfoAction transport                          -- Get the new transport state and globalInfo
+
+    -- We're done, put/unlock the (new) state
+    putMVar channelsLock (globalInfo', transport')
 
     -- Loop!
-    userReadLoop channelId channelsLock
+    shellReadClientLoop channelId channelsLock
 
--- | Handle a shell request
+-- | Handle a shell request: currently just print it out to standard output
 handleShellRequest :: MVar (GlobalChannelInfo, SshTransportInfo) -> SshString -> Channel ChannelInfo
 handleShellRequest channelsLock payload = do
     --printDebugLifted logDebug "This is the result of a shell request:"
