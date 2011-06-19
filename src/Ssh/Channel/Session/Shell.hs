@@ -10,6 +10,7 @@ import Data.Binary.Put
 
 import Control.Concurrent
 import Data.Maybe
+import Data.Word
 
 import System.Posix.IO
 
@@ -24,6 +25,43 @@ import Ssh.Transport
 import Ssh.NetworkIO
 import Ssh.Debug
 
+-- | Opcodes for Terminal Modes
+data TerminalMode =
+      TEnd  -- ^ 0, End of list of opcodes
+
+-- | Info about the terminal for a pseudo-terminal request
+data Terminal = Terminal {
+      termValue :: SshString
+    , widthChars :: Int
+    , heightChars :: Int
+    , widthPixels :: Int
+    , heightPixels :: Int
+    , terminalModes :: [TerminalMode]
+}
+
+-- | Maps a terminal mode to its opcode, as per RFC 4254, p 19, Section 8 (SSH Connection Protocol: Encoding of Terminal Modes)
+mapTerminalModeToOpcode :: TerminalMode -> Word8
+mapTerminalModeToOpcode TEnd = 0
+
+-- | Put instance for a list of encoded 'TerminalMode's, encoded as a string
+terminalModesString :: [TerminalMode] -> Put
+terminalModesString l = putString $ B.pack $ map mapTerminalModeToOpcode l
+
+-- | Put instance to encode a 'Terminal'
+putTerminal :: Terminal -> Put
+putTerminal (Terminal term wC hC wP hP tm) = do
+    putString term
+    putWord32 $ (toEnum . fromEnum) wC
+    putWord32 $ (toEnum . fromEnum) hC
+    putWord32 $ (toEnum . fromEnum) wP
+    putWord32 $ (toEnum . fromEnum) hP
+    terminalModesString tm
+
+-- TODO: get actual data from the environment
+-- | Gets the current terminal info, and add the specified modes to it
+getTerminalInfo :: [TerminalMode] -> IO Terminal
+getTerminalInfo modes = return $ Terminal "vt100" 80 24 640 480 modes
+
 -- | Request a remote shell on the channel.
 --   The MVar will contain the global 'Channels' data for this channel. Whenever *anyone* (either this code, or the caller of 'requestShell') wants to communicate
 --   with the server, the MVar should be used! This is so we can update the 'ChannelInfo's window size etc. safely after sending packets,
@@ -32,8 +70,15 @@ requestShell :: MVar (GlobalChannelInfo, SshTransportInfo) -> Channel ChannelInf
 requestShell minfo = do
     -- Request a shell on this channel
     nr <- getLocalChannelNr
-    let request = ChannelRequest nr "shell" False ""
-    MS.lift $ sPutPacket request
+
+    -- First of all, request a PTY to begin with
+    term <- MS.liftIO $ getTerminalInfo [TEnd]
+    let ptyReq = ChannelRequest nr "pty-req" False $ runPut $ putTerminal term
+    MS.lift $ sPutPacket ptyReq
+
+    -- Now request a shell
+    let shellReq = ChannelRequest nr "shell" False ""
+    MS.lift $ sPutPacket shellReq
 
     -- Update the channel info
     info <- setChannelHandler $ handleShellRequest minfo
