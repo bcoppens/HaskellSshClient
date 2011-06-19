@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SshClient (
+module Main (
       main
 ) where
 
@@ -106,15 +106,26 @@ clientLoop cd = do
         loop safeInfo sshSocket -- Loop
             where
                 loop safeInfo sshSocket = do
+                    -- Wait for input on the socket
                     MS.liftIO $ waitForSockInput sshSocket
-                    info <- MS.liftIO $ takeMVar safeInfo
+
+                    -- There was input, now take the state to read it.
+                    (globalInfo, connection) <- MS.liftIO $ takeMVar safeInfo
+
+                    -- Update our state, it might have been changed!
+                    MS.put globalInfo
+                    MS.lift $ MS.put connection
+
+                    -- Read & handle packet
                     packet <- MS.lift $ sGetPacket
                     handleChannel packet
 
-                    globalInfo <- MS.get
-                    connection <- MS.lift $ MS.get
-                    MS.liftIO $ putMVar safeInfo (globalInfo, connection)
+                    -- Put back the changed state
+                    globalInfo' <- MS.get
+                    connection' <- MS.lift $ MS.get
+                    MS.liftIO $ putMVar safeInfo (globalInfo', connection')
 
+                    -- Loop
                     loop safeInfo sshSocket
 
 main :: IO ()
