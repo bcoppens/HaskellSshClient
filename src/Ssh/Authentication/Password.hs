@@ -30,9 +30,9 @@ userAuthPayload pwd = runPut $ do -- pws should be UTF-8 encoded!
 
 -- TODO: password authentication SHOULD be disabled when no confidentiality (cipher == none) or no mac are used!
 -- TODO: handle SSH_MSG_USERAUTH_PASSWD_CHANGEREQ?
-doAuth :: SshString -> SshString -> SshConnection Bool
-doAuth username servicename = do
-    pwd <- MS.liftIO $ askPassword username
+doAuth :: SshString -> SshString -> SshString -> SshConnection Bool
+doAuth username hostname servicename = do
+    pwd <- MS.liftIO $ askPassword username hostname
     let payload = userAuthPayload pwd
 
     sPutPacket $ UserAuthRequest username servicename "password" payload
@@ -42,11 +42,9 @@ doAuth username servicename = do
         UserAuthSuccess -> True
         _               -> False
 
-hostName = "hostname" -- TODO
-
-askPassword :: SshString -> IO SshString
-askPassword username = do
-    let userLocation = B.append username $ B.append "@" hostName
+askPassword :: SshString -> SshString -> IO SshString
+askPassword username hostname = do
+    let userLocation = B.append username $ B.append "@" hostname
     putStrLn $ "Password for " ++ (map (toEnum . fromEnum) $ B.unpack userLocation) ++ ":"
     -- Echo Off, so we can enter our password
     attrs <- getTerminalAttributes stdInput

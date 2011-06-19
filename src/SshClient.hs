@@ -104,7 +104,7 @@ parseUserAndHostName s = do
 clientLoop :: SshString -> SshString -> ConnectionData -> SshConnection ()
 clientLoop username hostname cd = do
     ti <- MS.get
-    authOk <- authenticate username "ssh-connection" [passwordAuth]
+    authOk <- authenticate username hostname "ssh-connection" [passwordAuth]
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
     runGlobalChannelsToConnection initialGlobalChannelsState (doShell ti) -- demoExec

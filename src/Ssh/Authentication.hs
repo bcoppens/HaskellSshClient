@@ -19,13 +19,13 @@ import Ssh.String
 -- | Defines how a specific authentication service works
 data AuthenticationService = AuthenticationService {
       authenticationName :: SshString
-    -- | Takes username, servicename. Returns if authentication was succesful
-    , doAuthenticate :: SshString -> SshString -> SshConnection Bool
+    -- | Takes username, hostname, servicename. Returns if authentication was succesful
+    , doAuthenticate :: SshString -> SshString -> SshString -> SshConnection Bool
 }
 
 -- | Authenticate over an 'SshConnection': a username and a service, given a list of supported 'AuthenticationService's
-authenticate :: SshString -> SshString -> [AuthenticationService] -> SshConnection Bool
-authenticate username service authServices = do
+authenticate :: SshString -> SshString -> SshString -> [AuthenticationService] -> SshConnection Bool
+authenticate username hostname service authServices = do
     -- First of all, authenticate with the "none" method, so that it can fail and we see which authentication possibilities are supported
     sPutPacket $ ServiceRequest "ssh-userauth" -- Request userauth service
     sPutPacket $ UserAuthRequest username service "none" ""
@@ -41,7 +41,7 @@ authenticate username service authServices = do
     where loopSupported []             = return False
           loopSupported (askPass:rest) = do
             MS.liftIO $ printDebug logDebug $ "Trying authentication method " ++ (map (toEnum . fromEnum) $ B.unpack $ authenticationName askPass)
-            ok <- doAuthenticate askPass username service
+            ok <- doAuthenticate askPass username hostname service
             case ok of
                 True  -> return True
                 False -> loopSupported rest
