@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Implements the generic part of the SSH Connection Protocol (RFC 4254).
 module Ssh.Channel(
@@ -45,6 +45,7 @@ data ChannelInfo = ChannelInfo {
     , channelLocalMaxPacketSize :: Int
     , channelRemoteWindowSizeLeft :: Maybe Int  -- ^ Nothing if we have not yet received the OpenConfirmation from the remote, or Just windowSizeLeft
     , channelRemoteMaxPacketSize :: Maybe Int   -- ^ Nothing if we have not yet received the OpenConfirmation from the remote, or Just maxPacketSize
+    , queuedData :: SshString                   -- ^ If we try to send data when windowsize is too small, store it here until we get WindowsizeAdjust
     , channelInfoHandler :: ChannelHandler
 }
 
@@ -117,7 +118,7 @@ openChannel handler openInfo = do
     let remoteId    = Nothing
         ws          = 2^31
         ps          = 32768
-        chanInfo    = ChannelInfo local remoteId False False ws ps Nothing Nothing handler
+        chanInfo    = ChannelInfo local remoteId False False ws ps Nothing Nothing "" handler
         openRequest = ChannelOpen name local ws ps openInfo
 
     -- Request to open the channel
@@ -130,24 +131,55 @@ openChannel handler openInfo = do
     return chanInfo
 
 
--- TODO actually split/queue!
+-- TODO actually split/queue if the packetSize/windowSize indicates to split!
 -- | Queue payload to be sent over the channel indicated by 'ChannelInfo'.
 --   This data might be sent directly, or might be queued, or split, depending on how the size of the payload compares to the channel's
 --   'channelRemoteWindowSizeLeft' and 'channelRemotePacketSize'.
 queueDataOverChannel :: SshString -> ChannelInfo -> Channels ()
 queueDataOverChannel payload channel = do
     let localChannel  = channelLocalId channel
-        remoteChannel = fromJust $ channelRemoteId channel
+        sendSize      = B.length payload -- The length of the payload we have to send
+
+    -- See if we have to queue the data, or can send (part of it) it right away (TODO: packet size)
+    let bytesToSend = do
+            remote     <- channelRemoteId channel              -- If the remote has not yet sent its ChannelOpen, we have to queue the data
+            windowLeft <- channelRemoteWindowSizeLeft channel  -- if the remote's windowsize is too small, queue data!
+            let left   =  sendSize - (toEnum windowLeft)       -- We can send this many bytes
+            if left <= 0
+                then Nothing
+                else Just left
+
+    -- If the queue already contains data, this *must* also queue (i.e. append) it. Is ok, because we dequeue data automatically when we get a window size increase
+    case bytesToSend of
+        Nothing    -> queueBytes payload localChannel          -- Queue everything
+        Just bytes -> do                                       -- Send part, queue the rest
+            let (toSend, toQueue) = B.splitAt bytes payload
+            sendDataOverChannel toSend channel localChannel
+            queueBytes toQueue localChannel                    -- If this is empty, it'll just get ignored when we get a window size increase, etc.
+
+-- | Append these bytes to the 'ChannelInfo's send queue
+queueBytes :: SshString -> Int -> Channels ()
+queueBytes payload localId = do
+    when (not $ B.null payload) $ printDebugLifted logDebug $ "Queuing bytes: " ++ show payload
+
+    updateInfoWith localId $ \info -> info { queuedData = queuedData info `B.append` payload }
+
+    return ()
+
+-- TODO: packetsize?
+-- | Send (potentially previously queued) data to the remote *now* (the remote channel is assumed to be open, etc)
+sendDataOverChannel :: SshString -> ChannelInfo -> Int -> Channels ()
+sendDataOverChannel payload channel localId = do
+    let remoteChannel = fromJust $ channelRemoteId channel
         request       = ChannelData remoteChannel payload
 
     -- Send the data
     MS.lift $ sPutPacket request
 
     -- We sent some bytes, which decreases the available window size of the remote
-    updateInfoWith localChannel $ \info -> info { channelRemoteWindowSizeLeft = Just $ (fromJust $ channelRemoteWindowSizeLeft info) - (fromIntegral $ B.length payload) }
+    updateInfoWith localId $ \info -> info { channelRemoteWindowSizeLeft = Just $ (fromJust $ channelRemoteWindowSizeLeft info) - (fromIntegral $ B.length payload) }
 
-    return()
-
+    return ()
 
 -- | Get the 'ChannelInfo' with this local id, if it exists yet
 getChannel :: Int -> Channels (Maybe ChannelInfo)
@@ -170,9 +202,29 @@ handleChannel :: Packet -> Channels ChannelInfo
 handleChannel (ChannelOpenConfirmation recipientNr senderNr initWS maxPS payload) = do
     updateInfoWith recipientNr $ \info -> info { channelRemoteId = Just senderNr, channelRemoteWindowSizeLeft = Just initWS, channelRemoteMaxPacketSize = Just maxPS }
 
--- The remote says we can send some more bytes to this channel
+-- The remote says we can send some more bytes to this channel. Increase the window size, and send the sendQueue if needed
 handleChannel (ChannelWindowAdjust nr toAdd) = do
-    updateInfoWith nr $ \info -> info { channelRemoteWindowSizeLeft = Just $ toAdd + (fromJust $ channelRemoteWindowSizeLeft info) }
+    info  <- fromJust `liftM` getChannel nr
+
+    -- Remove the payload, increase the window size
+    let queue   = queuedData info
+        action  = \info -> info {
+              channelRemoteWindowSizeLeft = Just $ toAdd + (fromJust $ channelRemoteWindowSizeLeft info)
+            , queuedData = B.empty
+        }
+        newInfo = action info
+
+    -- Write new info
+    modifyUsedChannel nr newInfo
+
+    -- See if we have to try to send (part of) or queue
+    if B.null queue
+        then return newInfo
+        else do
+            printDebugLifted logDebug $ "Window size increased, requeing data"
+
+            queueDataOverChannel queue newInfo
+            fromJust `liftM` getChannel nr >>= return
 
 -- Remote sends that his side has reached an EOF
 handleChannel (ChannelEof nr) = do
