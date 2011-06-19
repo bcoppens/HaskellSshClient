@@ -144,10 +144,10 @@ queueDataOverChannel payload channel = do
     let bytesToSend = do
             remote     <- channelRemoteId channel              -- If the remote has not yet sent its ChannelOpen, we have to queue the data
             windowLeft <- channelRemoteWindowSizeLeft channel  -- if the remote's windowsize is too small, queue data!
-            let left   =  sendSize - (toEnum windowLeft)       -- We can send this many bytes
-            if left <= 0
+            let shouldSend =  min (toEnum windowLeft) sendSize -- We can send this many bytes
+            if shouldSend <= 0
                 then Nothing
-                else Just left
+                else Just shouldSend
 
     -- If the queue already contains data, this *must* also queue (i.e. append) it. Is ok, because we dequeue data automatically when we get a window size increase
     case bytesToSend of
