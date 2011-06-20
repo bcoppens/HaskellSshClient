@@ -19,6 +19,8 @@ import qualified Data.ByteString.Lazy as B
 
 -- Non-'standard' functionality
 import OpenSSL.BN -- modexp, random Integers
+import OpenSSL.Random -- random bytes
+import qualified Data.ByteString as BS -- Random uses a Strict ByteString
 
 import Data.Digest.Pure.SHA
 
@@ -56,10 +58,12 @@ filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHa
 --
 doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection ConnectionData
 doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
-    --cookie <- fmap (fromInteger . toInteger) $ replicateM 16 $ (randomRIO (0, 255 :: Int)) :: IO [Word8]
-
     -- Prepare our KEXInit packet
-    let cookie = replicate 16 (-1 :: Word8) -- TODO random
+
+    -- Get 16 bytes of randomness for our cookie.
+    -- TODO: use OpenSSL.Random.add for more randomness
+    cookie <- MS.liftIO $ BS.unpack `liftM` randBytes 16
+
     let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
 
     -- Set up the transports
