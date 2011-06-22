@@ -6,8 +6,12 @@ module Ssh.Cryption (
     , CryptionState (..)
     , CryptionInfo (..)
     , CryptoFunction
+    -- * CBC Mode
     , cbcAesEncrypt
     , cbcAesDecrypt
+    -- * SDCTR Mode
+    , ctrAesEncrypt
+    , ctrAesDecrypt
     , noCrypto
 )
 
@@ -44,6 +48,20 @@ data CryptionAlgorithm = CryptionAlgorithm {
     , blockSize :: Int          -- ^ can be 0 for stream ciphers
 }
 
+
+instance Show CryptionAlgorithm where
+    show = show . cryptoName
+
+-- | No crypto, to set up the initial KEX exchange
+noCrypto = CryptionAlgorithm "none" noop noop 0
+
+noop :: CryptoFunction
+noop _ t = return t
+
+---------
+-- CBC --
+---------
+
 -- | Decrypt with AES with the specified key length in CBC mode
 cbcAesDecrypt :: Int -> CryptoFunction
 cbcAesDecrypt ks key enc = do
@@ -78,15 +96,6 @@ cbcEncryptLoop encryptionFunction key (dec:decs) acc = do
     put $ CryptionInfo enc
     cbcEncryptLoop encryptionFunction key decs (acc++enc)
 
-instance Show CryptionAlgorithm where
-    show = show . cryptoName
-
--- | No crypto, to set up the initial KEX exchange
-noCrypto = CryptionAlgorithm "none" noop noop 0
-
-noop :: CryptoFunction
-noop _ t = return t
-
 -- | Decode with CBC
 cbcDec :: [Word8] -> [Word8] -> [Word8]
 cbcDec x y = map (uncurry xor) $ zip x y
@@ -94,10 +103,80 @@ cbcDec x y = map (uncurry xor) $ zip x y
 -- | Encode with CBC
 cbcEnc = cbcDec
 
+---------
+-- CTR --
+---------
+
+-- | Decrypt with AES with the specified key length in Stateful-Decryption Counter Mode (see RFC 4344, pp4-5)
+ctrAesDecrypt :: Int -> CryptoFunction
+ctrAesDecrypt ks key enc = do
+    -- Decode in chunks of 128 bits
+    let chunks = splitEvery 16 enc
+    ctrDecryptLoop (aesDecrypt ks) 128 key chunks []
+
+-- | Encrypt with AES with the specified key length in CBC mode
+ctrAesEncrypt :: Int -> CryptoFunction
+ctrAesEncrypt ks key dec = do
+    -- Encrypt in chunks of 128 bits
+    let chunks = splitEvery 16 dec
+    ctrEncryptLoop (aesEncrypt ks) 128 key chunks []
+
+-- | Read a list of characters big endian as a big endian integer
+asBigEndian :: [Word8] -> Integer
+asBigEndian x = asBigEndian' x 0
+    where
+        asBigEndian' [] acc     = acc
+        asBigEndian' (x:xs) acc = asBigEndian' xs $ 256*acc + (toEnum $ fromEnum x)
+
+-- TODO make this all more efficient!
+
+-- | Convert an Integer into a big endian list of characters
+toBigEndian :: Integer -> [Word8]
+toBigEndian x = reverse $ toBigEndian' x
+    where
+        toBigEndian' :: Integer -> [Word8]
+        toBigEndian' 0 = []
+        toBigEndian' x = [toEnum $ fromEnum r] ++ toBigEndian' d
+            where (d,r) = x `quotRem` 256
+
+-- | Pad to a length to the left
+padTo :: Int -> Word8 -> [Word8] -> [Word8]
+padTo to with l = (replicate (to - length l) with) ++ l
+
+
+-- | Generic decrypt with CTR. Like 'cbcDecryptLoop', also takes block size in bits
+ctrDecryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> Int -> [Word8] -> [[Word8]] -> [Word8] -> CryptionState [Word8]
+ctrDecryptLoop _ _ _ [] acc = return acc
+ctrDecryptLoop encryptionFunction bs key (enc:encs) acc = do
+    -- Get our IV
+    state <- stateVector `liftM` get
+
+    let -- Encrypt our state
+        xEnc = encryptionFunction key state
+
+        -- Get the plaintext by XORing the encrypted X with the ciphertext
+        plain = cbcDec xEnc enc
+
+        -- Interpret the IV as an unsigned network-byte order integer (big endian)
+        x     = asBigEndian state
+
+        -- Next state is x+1 stored as unsigned network-byte order integer (modulo 2^blocksize)
+        x'    = padTo (bs `div` 8) 0 $ toBigEndian $ (x+1) `mod` 2^bs
+
+    put $ CryptionInfo x'
+
+    ctrDecryptLoop encryptionFunction bs key encs (acc++plain)
+
+-- | Generic encryption with CBC. Like 'cbcEncryptLoop', and it also takes a block size in bits
+ctrEncryptLoop = ctrDecryptLoop
+
+-------------------------------------
+-- Encryption/Decryption functions --
+-------------------------------------
+
 -- DAMN THIS IS FUGLY!!!! ### TODO FIXME
 convertString1 = fromInteger . fromOctets 256
 convertString = fromInteger . fromOctets 256
---reconvertString s = B.pack $ map (toEnum . fromEnum) $ toOctets 256 s
 reconvertString s = toOctets 256 s
 
 -- | Encrypt with AES: keysize, key (keysize bits), plaintext (128 bits)
@@ -109,4 +188,3 @@ aesEncrypt 256 key plain =
 aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesDecrypt 256 key enc =
     reconvertString $ AES.decrypt (convertString1 (take 32 key) :: Word256) (convertString enc :: Word128)
-
