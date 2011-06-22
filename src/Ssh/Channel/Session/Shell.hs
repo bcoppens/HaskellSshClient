@@ -13,6 +13,7 @@ import Data.Maybe
 import Data.Word
 
 import System.Posix.IO
+import qualified System.Posix.Terminal as Term
 
 import qualified Control.Monad.State as MS
 import qualified Data.ByteString.Lazy as B
@@ -62,6 +63,31 @@ putTerminal (Terminal term wC hC wP hP tm) = do
 getTerminalInfo :: [TerminalMode] -> IO Terminal
 getTerminalInfo modes = return $ Terminal "vt100" 80 24 640 480 modes
 
+
+-- | Iterate 'withoutMode' on a list
+withoutModes :: Term.TerminalAttributes -> [Term.TerminalMode] -> Term.TerminalAttributes
+withoutModes = foldl Term.withoutMode
+
+-- | Set terminal modes so we can function as a remote shell: echo off and so
+setTerminalModesStart :: IO ()
+setTerminalModesStart = do
+    -- TODO, don't always get the attrs, monadify
+    -- Don't echo stuff
+    attrs <- Term.getTerminalAttributes stdInput
+    Term.setTerminalAttributes stdInput (withoutModes attrs [Term.EnableEcho]) Term.Immediately
+
+    -- Flow control thingies: IXOFF, IXON, IXANY
+    attrs' <- Term.getTerminalAttributes stdInput
+    Term.setTerminalAttributes stdInput (withoutModes attrs' [Term.StartStopInput]) Term.Immediately
+
+    attrs_o <- Term.getTerminalAttributes stdInput
+    Term.setTerminalAttributes stdOutput (withoutModes attrs_o [Term.StartStopOutput]) Term.Immediately
+
+    -- Pass on keyboard interrupts (ctrl+c and so)
+    attrs'' <- Term.getTerminalAttributes stdInput
+    Term.setTerminalAttributes stdInput (withoutModes attrs'' [Term.KeyboardInterrupts]) Term.Immediately
+
+
 -- | Request a remote shell on the channel.
 --   The MVar will contain the global 'Channels' data for this channel. Whenever *anyone* (either this code, or the caller of 'requestShell') wants to communicate
 --   with the server, the MVar should be used! This is so we can update the 'ChannelInfo's window size etc. safely after sending packets,
@@ -79,6 +105,9 @@ requestShell minfo = do
     -- Now request a shell
     let shellReq = ChannelRequest nr "shell" False ""
     MS.lift $ sPutPacket shellReq
+
+    -- Set the terminal modes (TODO: unset them again??)
+    MS.liftIO setTerminalModesStart
 
     -- Update the channel info
     info <- setChannelHandler $ handleShellRequest minfo
