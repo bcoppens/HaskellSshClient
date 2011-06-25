@@ -70,11 +70,12 @@ printDebugLifted ll s = MS.liftIO $ printDebug ll s
 
 
 -- logLevelRequired, currentLogLevel
-printLogMessage :: LogLevel -> LogLevel -> String -> b -> b
-printLogMessage req cur a b | cur <= req = trace a b
-                            | otherwise  = b
+printLogMessage :: LogLevel -> String -> b -> b
+printLogMessage ll a b | ll <= debugLevel = trace a b
+                       | otherwise        = b
+
 logTraceMessage' :: LogLevel -> String -> a -> a
-logTraceMessage' l s a = printLogMessage l debugLevel s a
+logTraceMessage' = printLogMessage
 
 -- | Similar to 'Debug.Trace.Show'
 logTraceMessageShow :: (Show a) => LogLevel -> a -> b -> b
