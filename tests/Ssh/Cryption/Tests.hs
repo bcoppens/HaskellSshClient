@@ -21,7 +21,7 @@ import Ssh.String
 aesCbcEncryptThenDecrypt ks plain key iv =
     let encrypted = evalState (cbcAesEncrypt ks key plain) $ CryptionInfo iv
         decrypted = evalState (cbcAesDecrypt ks key encrypted) $ CryptionInfo iv
-    in  (length key >= 16 && length iv >= 16) ==> encrypted == decrypted
+    in  (length key >= 16 && length iv >= 16 && length plain `mod` 16 == 0) ==> encrypted == decrypted
 
 aesEncryptThenDecrypt = map (\ks -> testProperty ("AES " ++ show ks ++ " CBC Encrypt then Decrypt") $ aesCbcEncryptThenDecrypt ks) [ 256 ]
 
