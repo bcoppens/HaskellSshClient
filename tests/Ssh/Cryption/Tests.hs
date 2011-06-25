@@ -19,16 +19,18 @@ import Ssh.Cryption
 import Ssh.String
 import Ssh.Debug
 
-aesCbcEncryptThenDecrypt ks plain key iv =
-    let encrypted = evalState (cbcAesEncrypt ks key plain) $ CryptionInfo iv
-        decrypted = evalState (cbcAesDecrypt ks key encrypted) $ CryptionInfo iv
+encryptThenDecryptTest enc dec ks plain key iv =
+    let encrypted = evalState (enc ks key plain) $ CryptionInfo iv
+        decrypted = evalState (dec ks key encrypted) $ CryptionInfo iv
     in  (length key >= 16 && length iv >= 16 && length plain `mod` 16 == 0) ==> plain == decrypted
 
-aesEncryptThenDecrypt = map (\ks -> testProperty ("AES " ++ show ks ++ " CBC Encrypt then Decrypt") $ aesCbcEncryptThenDecrypt ks) [ 256 ]
+encryptThenDecrypt name enc dec keysizes =
+    map (\ks -> testProperty (name ++ show ks ++ ": Encrypt then Decrypt == plaintext") $ encryptThenDecryptTest enc dec ks) keysizes
 
 tests :: [Test]
 tests = concat
     [
-        aesEncryptThenDecrypt
+        encryptThenDecrypt "AES CBC" cbcAesEncrypt cbcAesDecrypt [ 256 ]
+      , encryptThenDecrypt "AES CTR" ctrAesEncrypt ctrAesDecrypt [ 256 ]
     ]
 
