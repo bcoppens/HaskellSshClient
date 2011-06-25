@@ -26,7 +26,6 @@ import Ssh.KeyExchangeAlgorithm
 import Ssh.ConnectionData
 import Ssh.Cryption
 import Ssh.Transport
-import Ssh.HostKeyAlgorithm
 import Ssh.HashMac
 import Ssh.Debug
 import Ssh.String

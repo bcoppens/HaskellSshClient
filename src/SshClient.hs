@@ -40,7 +40,7 @@ import Ssh.KeyExchangeAlgorithm
 import Ssh.KeyExchangeAlgorithm.DiffieHellman
 import Ssh.KeyExchange
 import Ssh.HashMac
-import Ssh.HostKeyAlgorithm
+import Ssh.PublicKeyAlgorithm
 import Ssh.Transport
 import Ssh.Authentication
 import Ssh.Authentication.Password
@@ -62,7 +62,8 @@ clientCryptos = [
 
 clientHashMacs = [ sha1HashMac ]
 
-rsaHostKey = HostKeyAlgorithm "ssh-rsa"
+rsaHostKey = PublicKeyAlgorithm "ssh-rsa" (error "RSA HOSTKEY") (error "RSA HOSTKEY")
+
 clientHostKeys = [rsaHostKey]
 
 dhGroup1KEXAlgo = KeyExchangeAlgorithm "diffie-hellman-group1-sha1" (diffieHellmanGroup dhGroup1 {-sha1-})

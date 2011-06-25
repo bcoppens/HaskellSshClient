@@ -30,7 +30,6 @@ import Data.Binary.Put
 import Ssh.Cryption
 import Ssh.HashMac
 import Ssh.Packet
-import Ssh.HostKeyAlgorithm
 import Ssh.NetworkIO
 import Ssh.ConnectionData
 import Ssh.Debug

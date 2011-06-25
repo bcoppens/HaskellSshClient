@@ -30,7 +30,7 @@ import Ssh.KeyExchangeAlgorithm
 import Ssh.ConnectionData
 import Ssh.Cryption
 import Ssh.Transport
-import Ssh.HostKeyAlgorithm
+import Ssh.PublicKeyAlgorithm
 import Ssh.HashMac
 import Ssh.Debug
 import Ssh.String
@@ -41,12 +41,12 @@ serverListFiltered clientList serverList = filter (`elem` serverList) clientList
 
 -- | Filter all algorithms from a 'KEXInit' packet that are not in the given arguments.
 --   Can be used to see which algorithms are supported by both client and server. Keeps the order of the client's supported lists
-filterKEXInit :: [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Packet -> Packet
+filterKEXInit :: [KeyExchangeAlgorithm] -> [PublicKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> Packet -> Packet
 filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs (KEXInit raw c ka hka ecs esc mcs msc) =
     KEXInit raw c ka' hka' ecs' esc' mcs' msc'
     where
         ka'  = serverListFiltered (map kexName clientKEXAlgos) ka
-        hka' = serverListFiltered (map hostKeyAlgorithmName clientHostKeys) hka
+        hka' = serverListFiltered (map publicKeyAlgorithmName clientHostKeys) hka
         ecs' = serverListFiltered (map cryptoName clientCryptos) ecs
         esc' = serverListFiltered (map cryptoName serverCryptos) esc
         mcs' = serverListFiltered (map hashName clientHashMacs) mcs
@@ -56,7 +56,7 @@ filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHa
 --   Needs the version strings of both client and server. Needs a list of all client-side supported algorithms.
 --   We also need a function that can be used to decode and decrypt packets using a given 'Transport'.
 --
-doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection ConnectionData
+doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [PublicKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection ConnectionData
 doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
     -- Prepare our KEXInit packet
 
@@ -64,7 +64,7 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     -- TODO: use OpenSSL.Random.add for more randomness
     cookie <- MS.liftIO $ BS.unpack `liftM` randBytes 16
 
-    let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
+    let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map publicKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
 
     -- Set up the transports
     let initialTransport     = SshTransport noCrypto noHashMac -- TODO this should only be initialized for the *first* Kex, not for rekeying!
