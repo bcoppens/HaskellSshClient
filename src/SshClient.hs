@@ -55,7 +55,10 @@ debug = putStrLn
 
 clientVersionString = "SSH-2.0-BartSSHaskell-0.0.1 This is crappy software!\r\n"
 
-clientCryptos = [ (CryptionAlgorithm "aes256-cbc" (cbcAesEncrypt 256) (cbcAesDecrypt 256) 16) ]
+clientCryptos = [
+      (CryptionAlgorithm "aes256-ctr" (ctrAesEncrypt 256) (ctrAesDecrypt 256) 16),
+      (CryptionAlgorithm "aes256-cbc" (cbcAesEncrypt 256) (cbcAesDecrypt 256) 16)
+    ]
 
 clientHashMacs = [ sha1HashMac ]
 
