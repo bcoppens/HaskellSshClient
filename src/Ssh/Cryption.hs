@@ -58,6 +58,9 @@ noCrypto = CryptionAlgorithm "none" noop noop 0
 noop :: CryptoFunction
 noop _ t = return t
 
+-- | Converts the 'Integer to a '[Word8]' (base 256) list, which has the required 'Int length
+padToInWord8 = i2osp
+
 ---------
 -- CBC --
 ---------
@@ -176,14 +179,13 @@ ctrEncryptLoop = ctrDecryptLoop
 -- DAMN THIS IS FUGLY!!!! ### TODO FIXME
 convertString1 = fromInteger . fromOctets 256
 convertString = fromInteger . fromOctets 256
-reconvertString s = toOctets 256 s
 
 -- | Encrypt with AES: keysize, key (keysize bits), plaintext (128 bits)
 aesEncrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesEncrypt 256 key plain =
-    reconvertString $ AES.encrypt (convertString1 (take 32 key) :: Word256) (convertString plain :: Word128)
+    padToInWord8 16 $ AES.encrypt (convertString1 (take 32 key) :: Word256) (convertString plain :: Word128)
 
 -- | Decrypt: keysize, key (keysize bits), ciphertext (128 bits)
 aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
 aesDecrypt 256 key enc =
-    reconvertString $ AES.decrypt (convertString1 (take 32 key) :: Word256) (convertString enc :: Word128)
+    padToInWord8 16 $ AES.decrypt (convertString1 (take 32 key) :: Word256) (convertString enc :: Word128)
