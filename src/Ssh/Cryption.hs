@@ -12,7 +12,13 @@ module Ssh.Cryption (
     -- * SDCTR Mode
     , ctrAesEncrypt
     , ctrAesDecrypt
+    -- * Miscelaneous
     , noCrypto
+    -- TODO: these in a seperate file?
+    , padToInWord8
+    , toBigEndian
+    , padTo
+    , asBigEndian
 )
 
 where
@@ -59,6 +65,7 @@ noop :: CryptoFunction
 noop _ t = return t
 
 -- | Converts the 'Integer to a '[Word8]' (base 256) list, which has the required 'Int length
+padToInWord8 :: Integral a => Int -> a -> [Word8]
 padToInWord8 = i2osp
 
 ---------

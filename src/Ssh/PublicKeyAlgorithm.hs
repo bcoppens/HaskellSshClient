@@ -9,10 +9,11 @@ import Ssh.String
 
 -- | Defines information about a public key algorithm
 --   For signing, this should be instantiated with the right private key info...
+--   Currently these are in IO because OpenSSL.DSA also uses IO
 data PublicKeyAlgorithm = PublicKeyAlgorithm {
       publicKeyAlgorithmName :: SshString
-    , verify :: SshString -> SshString -> Bool -- ^ Verify if a given public key (first argument) signed the data (second argument)
-    , sign :: SshString -> SshString           -- ^ Sign the data
+    , verify :: SshString -> SshString -> IO Bool -- ^ Verify if a given public key (first argument) signed the data (second argument)
+    , sign :: SshString -> IO SshString           -- ^ Sign the data
 }
 
 instance Show PublicKeyAlgorithm where
