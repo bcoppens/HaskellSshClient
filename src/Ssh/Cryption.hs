@@ -112,7 +112,7 @@ ctrAesDecrypt :: Int -> CryptoFunction
 ctrAesDecrypt ks key enc = do
     -- Decode in chunks of 128 bits
     let chunks = splitEvery 16 enc
-    ctrDecryptLoop (aesDecrypt ks) 128 key chunks []
+    ctrDecryptLoop (aesEncrypt ks) 128 key chunks []
 
 -- | Encrypt with AES with the specified key length in CBC mode
 ctrAesEncrypt :: Int -> CryptoFunction
@@ -148,9 +148,8 @@ padTo to with l = (replicate (to - length l) with) ++ l
 ctrDecryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> Int -> [Word8] -> [[Word8]] -> [Word8] -> CryptionState [Word8]
 ctrDecryptLoop _ _ _ [] acc = return acc
 ctrDecryptLoop encryptionFunction bs key (enc:encs) acc = do
-    -- Get our IV
-    state <- stateVector `liftM` get
-
+    -- Get our 128bit IV
+    state <- (take 16 . stateVector) `liftM` get
     let -- Encrypt our state
         xEnc = encryptionFunction key state
 
