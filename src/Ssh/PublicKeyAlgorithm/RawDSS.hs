@@ -40,6 +40,7 @@ putDSSSignature r s = do
     let blob = runPut $ encodeRS r s
     putString blob
 
+-- | Sign with a keypair some string, and turn it into something SSH recognizes as a signature
 dsaSign :: SomeKeyPair -> SshString -> IO SshString
 dsaSign kp toSign = do
     let -- signDigestedDataWithDSA signs data digested with sha1. SHA1 is required by the DSA standard (FIPS 186-2)
@@ -57,14 +58,18 @@ dsaSign kp toSign = do
     -- Encode the resulting signature
     return $ runPut $ putDSSSignature r s
 
--- | Read key information from a private key file with which we can sign
-mkRawDSSSigner :: String -> IO PublicKeyAlgorithm
-mkRawDSSSigner filename = do
-    -- Read the file
-    contents <- readFile filename
+
+
+-- | Read key information from a private key file with which we can sign. Also get the public key from the second filename
+mkRawDSSSigner :: String -> String -> IO PublicKeyAlgorithm
+mkRawDSSSigner privateKeyFile publicKeyFile = do
+    -- Read the private key file
+    privateKey <- readFile privateKeyFile
+    publicKey  <- readFile publicKeyFile
 
     -- TODO! Use a different PemPasswordSupply
+    -- TODO: should be scrubbed from memory?
     -- Read the private key into something we can use
-    keyPair <- PEM.readPrivateKey contents PEM.PwNone
+    keyPair <- PEM.readPrivateKey privateKey PEM.PwNone
 
-    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") $ dsaSign keyPair
+    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") (dsaSign keyPair) (return $ B.pack $ map (toEnum . fromEnum) publicKey)
