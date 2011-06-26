@@ -58,18 +58,37 @@ dsaSign kp toSign = do
     -- Encode the resulting signature
     return $ runPut $ putDSSSignature r s
 
+-- | Convert a 'SomePublicKey which is hopefully a DSA(Pub)KeyPair into the ssh-dss key format
+rawDSSKeyBlob :: SomeKeyPair -> SshString
+rawDSSKeyBlob pubkey =
+    let mDsaPubKey = toKeyPair pubkey
+        dsaPubKey  = fromJust mDsaPubKey
 
+        -- Read the data from the public key; public key = y = g^x
+        (p, q, g, y) = DSA.dsaPubKeyToTuple dsaPubKey
+    -- The actual key format
+    in runPut $ do
+        putString  "ssh-dss"
+        putMPInt   p
+        putMPInt   q
+        putMPInt   g
+        putMPInt   y
 
 -- | Read key information from a private key file with which we can sign. Also get the public key from the second filename
 mkRawDSSSigner :: String -> String -> IO PublicKeyAlgorithm
-mkRawDSSSigner privateKeyFile publicKeyFile = do
-    -- Read the private key file
+mkRawDSSSigner privateKeyFile _ = do
+    -- Read the private key file. Also contains the public part
     privateKey <- readFile privateKeyFile
-    publicKey  <- readFile publicKeyFile
 
     -- TODO! Use a different PemPasswordSupply
     -- TODO: should be scrubbed from memory?
     -- Read the private key into something we can use
     keyPair <- PEM.readPrivateKey privateKey PEM.PwNone
 
-    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") (dsaSign keyPair) (B.pack $ map (toEnum . fromEnum) publicKey)
+    -- We'll sign strings with this key pair
+    let signer = dsaSign keyPair
+
+    -- And the public key blob
+    let pubKeyBlob = rawDSSKeyBlob keyPair
+
+    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") signer pubKeyBlob
