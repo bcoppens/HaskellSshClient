@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- | The generic part of SSH's Transport Layer Protocol (RFC 4253).
 --   Uses crypto functions to encrypt/decrypt packets, figure out their sizes, and checks their HMAC
 module Ssh.Transport (
@@ -6,6 +8,7 @@ module Ssh.Transport (
     , SshTransportInfo (..)
     , ConnectionData (..)
     , SshConnection (..)
+    , mkTransportInfo
     -- * Reading/Writing 'Packet's over the network
     , sGetPacket
     , sPutPacket
@@ -13,6 +16,10 @@ module Ssh.Transport (
     -- * Encoding and decoding for 'Packet's
     , makeSshPacket
     , getSizes
+#ifdef DEBUG
+    -- * Debug/Verbose
+    , showTrafficStats
+#endif
 ) where
 
 import Control.Monad
@@ -41,6 +48,17 @@ data SshTransport = SshTransport {
     , mac    :: HashMac
 } deriving Show
 
+data TrafficStats = TrafficStats {
+      packets :: Int
+    , totalBytes :: Int
+    , packetBytes :: Int
+    , paddingBytes :: Int
+    , macBytes :: Int
+} deriving Show
+
+-- | Empty (0) traffic stats
+emptyTraffic = TrafficStats 0 0 0 0 0
+
 -- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
       socket :: SshSocket
@@ -56,7 +74,19 @@ data SshTransportInfo = SshTransportInfo {
     -- languages
 
     , connectionData :: ConnectionData
+
+#ifdef DEBUG
+    , c2sStats :: TrafficStats
+    , s2cStats :: TrafficStats
+#endif
 } deriving Show
+
+-- | Because the contents/signature of a SshTransportInfo vary according to -DDEBUG, provide a convenient wrapper constructor that is fixed in its signature
+mkTransportInfo s c2s cv cs s2c sv ss cd =
+    SshTransportInfo s c2s cv cs s2c sv ss cd
+#ifdef DEBUG
+        emptyTraffic emptyTraffic
+#endif
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
@@ -232,3 +262,8 @@ decryptBytes c s = do
     MS.put $ transportInfo { serverVector = stateVector newState }
     return decrypted
 
+#ifdef DEBUG
+-- | Show the stats of this connection
+showTrafficStats :: SshTransportInfo -> String
+showTrafficStats info = "Stats:\nClient to Server: " ++ show (c2sStats info) ++ "\nServer to Client: " ++ show (s2cStats info)
+#endif

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings,CPP #-}
 
 module Main (
       main
@@ -206,8 +206,6 @@ main = do
     -- Get username and hostname
     (username, hostname) <- getUserAndHostNameFromArguments location
 
-    putStrLn $ "connecting to " ++ show hostname ++ " with " ++ show username ++ " at port " ++ (show $ port options)
-
     -- Connect to the server
     connection <- connect' hostname $ port options
     --hSetBuffering connection $ BlockBuffering Nothing
@@ -220,12 +218,19 @@ main = do
     -- TODO remove runState!
     -- Do the Key Exchange, initialize the SshConnection
     sshSock <- mkSocket connection
-    let tinfo = SshTransportInfo sshSock (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+
+    let tinfo = mkTransportInfo sshSock (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+
     (cd, newState) <- flip MS.runStateT tinfo $
         doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
 
     -- Run the client loop, i.e. the real part
-    MS.runStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options cd) newState
+    result <- MS.execStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options cd) newState
+
+#ifdef DEBUG
+    -- We might be being verbose, perhaps print out some statistics on the connection
+    printDebug logDebug $ showTrafficStats result
+#endif
 
     -- We're done
     sClose connection
