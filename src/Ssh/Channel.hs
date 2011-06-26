@@ -39,6 +39,7 @@ import Ssh.String
 data ChannelInfo = ChannelInfo {
       channelLocalId :: Int
     , channelRemoteId :: Maybe Int              -- ^ Nothing if we have not yet received the OpenConfirmation with the remote ID, or Just remoteId
+    , closed :: Bool
     , sentEof :: Bool
     , gotEof  :: Bool
     , channelLocalWindowSizeLeft :: Int
@@ -118,7 +119,7 @@ openChannel handler openInfo = do
     let remoteId    = Nothing
         ws          = 2^31
         ps          = 32768
-        chanInfo    = ChannelInfo local remoteId False False ws ps Nothing Nothing "" handler
+        chanInfo    = ChannelInfo local remoteId False False False ws ps Nothing Nothing "" handler
         openRequest = ChannelOpen name local ws ps openInfo
 
     -- Request to open the channel
@@ -232,8 +233,19 @@ handleChannel (ChannelEof nr) = do
 
 -- Remote closed this channel, remove it from our list for later reuse once we have it removed too
 handleChannel (ChannelClose nr) = do
-    -- TODO
-    info <- fromJust `liftM` getChannel nr
+    -- We must send back a ChannelClose, and actually close this channel
+    info   <- fromJust `liftM` getChannel nr
+    MS.lift $ sPutPacket $ ChannelClose $ fromJust $ channelRemoteId info
+
+    -- Set this channel to closed locally
+    closed <- updateInfoWith nr $ \info -> info { gotEof = True }
+
+    -- This channel is free again to be reused in our Channels state
+    state  <- MS.get
+    let newUsedChannels = Map.delete nr $ usedChannels state
+        newFreeChannels = nr : freeChannels state
+    MS.put $ GlobalChannelInfo { usedChannels = newUsedChannels, freeChannels = newFreeChannels }
+
     return info
 
 -- Extended data can be stuff like standard error
