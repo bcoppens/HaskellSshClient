@@ -110,7 +110,7 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
                           serverVector = server2ClientIV connectiondata,
                           client2server = SshTransport c2sfun s2cmacfun,
                           clientVector = client2ServerIV connectiondata,
-                          connectionData = connectiondata
+                          maybeConnectionData = Just connectiondata
                          }
 
     printDebugLifted logLowLevelDebug "KEX DONE?"

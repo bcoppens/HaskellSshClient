@@ -219,7 +219,7 @@ main = do
     -- Do the Key Exchange, initialize the SshConnection
     sshSock <- mkSocket connection
 
-    let tinfo = mkTransportInfo sshSock (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 (error "ConnectionData")
+    let tinfo = mkTransportInfo sshSock (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing
 
     (cd, newState) <- flip MS.runStateT tinfo $
         doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs

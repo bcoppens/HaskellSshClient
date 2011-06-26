@@ -9,6 +9,7 @@ module Ssh.Transport (
     , ConnectionData (..)
     , SshConnection (..)
     , mkTransportInfo
+    , connectionData
     -- * Reading/Writing 'Packet's over the network
     , sGetPacket
     , sPutPacket
@@ -27,6 +28,7 @@ import qualified Control.Monad.State as MS
 
 import Network
 import Data.Int
+import Data.Maybe
 
 import qualified Data.ByteString.Lazy as B
 
@@ -73,13 +75,18 @@ data SshTransportInfo = SshTransportInfo {
     -- compression
     -- languages
 
-    , connectionData :: ConnectionData
+    -- | Initially, this is 'Nothing. The first KEX fills this out. A rekey will detect the Just cd, and re-use its sessionId
+    , maybeConnectionData :: Maybe ConnectionData
 
 #ifdef DEBUG
     , c2sStats :: TrafficStats
     , s2cStats :: TrafficStats
 #endif
 } deriving Show
+
+-- | Convencience method: most data can correctly assume that maybeConnectionData is actually a Just ConnectionData. Unwrap that automatically with a decent name
+connectionData = fromJust . maybeConnectionData
+
 
 -- | Because the contents/signature of a SshTransportInfo vary according to -DDEBUG, provide a convenient wrapper constructor that is fixed in its signature
 mkTransportInfo s c2s cv cs s2c sv ss cd =

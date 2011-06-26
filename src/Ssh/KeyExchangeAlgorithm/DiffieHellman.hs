@@ -98,13 +98,16 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
 
         -- With all this data, we can now compute the exchange hash
         exchangeHash = dhComputeExchangeHash {-hash-} cvs svs rawClientKexInit rawServerKexInit hostKey e (dh_f dhReply) sharedSecret
-        sId = B.unpack exchangeHash
+
+        -- Is this our initial key exchange, or a re-key? If this is the initial exchange, initialize the sessionId with the exchangeHash. Otherwise, reuse the sId
+        sId = case maybeConnectionData transportInfo of
+                Nothing -> B.unpack exchangeHash
+                Just cd -> sessionId cd
 
         -- Compute the key data
         theMap = \c -> createKeyData sharedSecret exchangeHash c exchangeHash
         [c2sIV, s2cIV, c2sEncKey, s2cEncKey, c2sIntKey, s2cIntKey] = map (take 128 . theMap . convert) ['A' .. 'F'] -- TODO take 128 -> the right value!
 
-        -- TODO the session_id from the FIRST kex should remain the session_id for all future
         -- Now we have all data that is computed in the key exchange, store this data
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
 
