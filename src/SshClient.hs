@@ -192,8 +192,10 @@ clientLoop username hostname options cd = do
                     connection' <- MS.lift $ MS.get
                     MS.liftIO $ putMVar safeInfo (globalInfo', connection')
 
-                    -- Loop
-                    loop safeInfo sshSocket
+                    -- We opened a channel. If 0 channels are in use, this means we/the server closed all our channel(s) => terminate our loop; otherwise => keep running
+                    case Map.size $ usedChannels globalInfo' of
+                        0         -> return ()
+                        otherwise -> loop safeInfo sshSocket
 
 main :: IO ()
 main = do
