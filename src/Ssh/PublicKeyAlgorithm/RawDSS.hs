@@ -72,4 +72,4 @@ mkRawDSSSigner privateKeyFile publicKeyFile = do
     -- Read the private key into something we can use
     keyPair <- PEM.readPrivateKey privateKey PEM.PwNone
 
-    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") (dsaSign keyPair) (return $ B.pack $ map (toEnum . fromEnum) publicKey)
+    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") (dsaSign keyPair) (B.pack $ map (toEnum . fromEnum) publicKey)

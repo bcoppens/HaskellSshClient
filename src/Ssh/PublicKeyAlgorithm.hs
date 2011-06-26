@@ -14,7 +14,7 @@ data PublicKeyAlgorithm = PublicKeyAlgorithm {
       publicKeyAlgorithmName :: SshString
     , verify :: SshString -> SshString -> IO Bool -- ^ Verify if a given public key (first argument) signed the data (second argument)
     , sign :: SshString -> IO SshString           -- ^ Sign the data
-    , publicKey :: IO SshString                   -- ^ The public key corresponding to the private key used in 'sign
+    , publicKey :: SshString                      -- ^ The public key corresponding to the private key used in 'sign
 }
 
 instance Show PublicKeyAlgorithm where
