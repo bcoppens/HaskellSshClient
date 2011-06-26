@@ -74,9 +74,9 @@ rawDSSKeyBlob pubkey =
         putMPInt   g
         putMPInt   y
 
--- | Read key information from a private key file with which we can sign. Also get the public key from the second filename
-mkRawDSSSigner :: String -> String -> IO PublicKeyAlgorithm
-mkRawDSSSigner privateKeyFile _ = do
+-- | Read key information from a private key file with which we can sign. Also get the public key information from this file
+mkRawDSSSigner :: String -> IO PublicKeyAlgorithm
+mkRawDSSSigner privateKeyFile = do
     -- Read the private key file. Also contains the public part
     privateKey <- readFile privateKeyFile
 
