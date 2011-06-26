@@ -91,6 +91,27 @@ mkTransportInfo s c2s cv cs s2c sv ss cd =
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
 
+-- | Type so we can easily switch wich stats to edit
+data LogStats = C2S | S2C
+    deriving Eq
+
+-- | Log stats: automatically adds a packet. Other arguments: total bytes, packetbytes, paddingbytes, macbytes
+logStats :: LogStats -> Int -> Int -> Int -> Int -> SshConnection ()
+#ifdef DEBUG
+logStats l tb packb padb macb | l == C2S = MS.modify $ \i -> i { c2sStats = inc $ c2sStats i }
+                              | l == S2C = MS.modify $ \i -> i { s2cStats = inc $ s2cStats i }
+                              where
+                                inc stats = stats {
+                                    packets      = 1 + packets stats,
+                                    totalBytes   = tb + totalBytes stats,
+                                    packetBytes  = packb + packetBytes stats,
+                                    paddingBytes = padb + paddingBytes stats,
+                                    macBytes     = macb + macBytes stats
+                                }
+#else
+logStats _ _ _ _ _ = return ()
+#endif
+
 -- | Wrap an SSH packet payload with a length header and its padding
 makeSshPacketWithoutMac :: SshTransport -> SshString -> SshString -> SshString
 makeSshPacketWithoutMac t payload padding = runPut $ do
@@ -149,7 +170,13 @@ sPutPacket packet = do
     MS.liftIO $ sockWriteBytes sock $ B.pack encBytes
     MS.liftIO $ sockWriteBytes sock $ B.pack computedMac
 
+    -- Debug/Logging
     printDebugLifted logDebugExtended $ "Sent packet: " ++ show packet
+    let macBytes     = length computedMac
+        totalBytes   = macBytes + length encBytes
+        packetBytes  = (toEnum . fromEnum) $ B.length $ runPut $ putPacket packet
+        paddingBytes = length encBytes - packetBytes
+    logStats C2S totalBytes packetBytes paddingBytes macBytes
 
     MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
 
