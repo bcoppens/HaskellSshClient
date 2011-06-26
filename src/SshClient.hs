@@ -17,6 +17,7 @@ import qualified Data.Map as Map
 
 import System.IO
 import System.Environment
+import System.Console.GetOpt
 import GHC.IO.Handle
 
 import Network.BSD ( HostEntry (..), getProtocolNumber, getHostByName
@@ -41,9 +42,11 @@ import Ssh.KeyExchangeAlgorithm.DiffieHellman
 import Ssh.KeyExchange
 import Ssh.HashMac
 import Ssh.PublicKeyAlgorithm
+import Ssh.PublicKeyAlgorithm.RawDSS
 import Ssh.Transport
 import Ssh.Authentication
 import Ssh.Authentication.Password
+import Ssh.Authentication.PublicKey
 import Ssh.Debug
 import Ssh.Channel
 import Ssh.Channel.Session
@@ -52,6 +55,28 @@ import Ssh.String
 import Debug.Trace
 debug = putStrLn
 
+
+data Options = Options {
+      privateKeyFile :: Maybe String
+    , port :: Int
+} deriving Show
+
+defaultOptions = Options Nothing 22
+
+options :: [OptDescr (Options -> Options)]
+options = [
+      Option [] ["privatekeyfile"] (OptArg ((\f opts -> opts { privateKeyFile = Just f }) . fromMaybe "") "file") "Location of the (DSA) private key file to use, if any"
+    , Option ['p'] ["port"] (OptArg ((\p opts -> opts { port = read p } ) . fromMaybe "22") "port") "Port to connect to"
+  ]
+
+-- | Result: first are the options, second should be the 'non-option' user@hostname
+getOptions :: [String] -> IO (Options, [String])
+getOptions argv =
+    case getOpt Permute options argv of
+        -- (_,[],_)   -> ioError (userError ("No hostname specified!\n" ++ (usageInfo header options))) -- TODO: uncomment this in the final code, makes sure the user gave a hostname :)
+        (o,n,[]  ) -> return  (foldl (flip id) defaultOptions o, n)
+        (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
+    where header = "Usage: SshClient [OPTIONS...] [user@]hostname"
 
 clientVersionString = "SSH-2.0-BartSSHaskell-0.0.1 This is crappy software!\r\n"
 
@@ -82,10 +107,9 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 -- | Parse commandline argument for username@hostname. If just hostname is specified, get username from USER environment variable.
 --   If no commandline argument is given, use bartcopp@localhost for debugging purposes
 --   Returns (username, hostname). Since we first resolve the hostname, that's a regular 'String', since we'll send the username, that's an 'SshString'
-getUserAndHostNameFromArguments :: IO (SshString, String)
-getUserAndHostNameFromArguments = do
-    args <- getArgs
-    if null args
+getUserAndHostNameFromArguments :: [String] -> IO (SshString, String)
+getUserAndHostNameFromArguments args = do
+    if null args || args == ["localhost"]
         then return ("bartcopp", "localhost")
         else parseUserAndHostName $ head args
 
@@ -105,11 +129,21 @@ parseUserAndHostName s = do
         where
             convert = map (toEnum . fromEnum)
 
-clientLoop :: SshString -> SshString -> ConnectionData -> SshConnection ()
-clientLoop username hostname cd = do
+-- | This is the main client loop, performing first the authentication, then opening channels, etc...
+clientLoop :: SshString -> SshString -> Options -> ConnectionData -> SshConnection ()
+clientLoop username hostname options cd = do
     ti <- MS.get
 
-    authOk <- authenticate username hostname "ssh-connection" [passwordAuth]
+    -- Which authentication methods do we support? password always, but perhaps the user specified a private key file (DSA only for now)
+    authMethods <-
+        case privateKeyFile options of
+            Nothing   -> return [passwordAuth]
+            Just file -> do
+                publicKey <- MS.liftIO $ mkRawDSSSigner file
+                return $ [publicKeyAuth publicKey, passwordAuth]
+
+    -- Try to authenticate with the specified methods
+    authOk <- authenticate username hostname "ssh-connection" authMethods
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
     runGlobalChannelsToConnection initialGlobalChannelsState (doShell ti) -- demoExec
@@ -163,11 +197,17 @@ clientLoop username hostname cd = do
 
 main :: IO ()
 main = do
+    -- Parse the arguments
+    args    <- getArgs
+    (options, location) <- getOptions args
+
     -- Get username and hostname
-    (username, hostname) <- getUserAndHostNameFromArguments
+    (username, hostname) <- getUserAndHostNameFromArguments location
+
+    putStrLn $ "connecting to " ++ show hostname ++ " with " ++ show username ++ " at port " ++ (show $ port options)
 
     -- Connect to the server
-    connection <- connect' hostname 22
+    connection <- connect' hostname $ port options
     --hSetBuffering connection $ BlockBuffering Nothing
 
     -- Get the server's version string, send our version string
@@ -183,7 +223,7 @@ main = do
         doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
 
     -- Run the client loop, i.e. the real part
-    MS.runStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) cd) newState
+    MS.runStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options cd) newState
 
     -- We're done
     sClose connection
