@@ -71,22 +71,18 @@ withoutModes = foldl Term.withoutMode
 -- | Set terminal modes so we can function as a remote shell: echo off and so
 setTerminalModesStart :: IO ()
 setTerminalModesStart = do
-    -- TODO, don't always get the attrs, monadify
-    -- Don't echo stuff
+
     attrs <- Term.getTerminalAttributes stdInput
-    Term.setTerminalAttributes stdInput (withoutModes attrs [Term.EnableEcho]) Term.Immediately
 
-    -- Flow control thingies: IXOFF, IXON, IXANY
-    attrs' <- Term.getTerminalAttributes stdInput
-    Term.setTerminalAttributes stdInput (withoutModes attrs' [Term.StartStopInput]) Term.Immediately
-
-    attrs_o <- Term.getTerminalAttributes stdInput
-    Term.setTerminalAttributes stdOutput (withoutModes attrs_o [Term.StartStopOutput]) Term.Immediately
-
-    -- Pass on keyboard interrupts (ctrl+c and so)
-    attrs'' <- Term.getTerminalAttributes stdInput
-    Term.setTerminalAttributes stdInput (withoutModes attrs'' [Term.KeyboardInterrupts]) Term.Immediately
-
+    let withouts = [    -- Don't echo stuff
+                        Term.EnableEcho
+                        -- Flow control thingies: IXOFF, IXON, IXANY
+                        , Term.StartStopInput
+                        , Term.StartStopOutput
+                        -- Pass on keyboard interrupts (ctrl+c and so)
+                        , Term.KeyboardInterrupts
+                   ]
+    Term.setTerminalAttributes stdInput (withoutModes attrs withouts) Term.Immediately
 
 -- | Request a remote shell on the channel.
 --   The MVar will contain the global 'Channels' data for this channel. Whenever *anyone* (either this code, or the caller of 'requestShell') wants to communicate
