@@ -26,7 +26,7 @@ import Ssh.Debug
 import Ssh.Channel.Session.Shell
 
 -- | This is the default handler for a session
-sessionHandler = ChannelHandler "session" handleDefaultSession
+sessionHandler = ChannelHandler "session" handleDefaultSession $ return ()
 
 -- | Different kinds of sessions are supported
 data SessionType =
@@ -62,7 +62,7 @@ requestExec cmd = do
     MS.lift $ sPutPacket request
 
     -- update the channelinfo with the correct handler function to handle the data of this exec request
-    setChannelHandler handleExecRequest
+    setChannelPayloadHandler handleExecRequest
 
 -- | Handler for when we haven't sent a request yet
 handleDefaultSession :: SshString -> Channel ChannelInfo

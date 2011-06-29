@@ -89,7 +89,8 @@ setTerminalModesStart = do
         -- Disable canonical mode (see man 3 termios). Basically disables line editing mode, read immediately returns once 1 (we define this) byte is available
         -- withMinInput is the same as setting the VMIN control character of c_cc of termios_p. For this, ProcessInput (aka ICANON) should be on!
         readOneByte = Term.withMinInput withouts 1
-    Term.setTerminalAttributes stdInput readOneByte  Term.Immediately
+
+    Term.setTerminalAttributes stdInput readOneByte Term.Immediately
 
 -- | Request a remote shell on the channel.
 --   The MVar will contain the global 'Channels' data for this channel. Whenever *anyone* (either this code, or the caller of 'requestShell') wants to communicate
@@ -113,7 +114,7 @@ requestShell minfo = do
     MS.liftIO setTerminalModesStart
 
     -- Update the channel info
-    info <- setChannelHandler $ handleShellRequest minfo
+    info <- setChannelPayloadHandler $ handleShellRequest minfo
 
     MS.liftIO $ forkIO $ shellReadClientLoop nr minfo
 

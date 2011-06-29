@@ -15,7 +15,8 @@ module Ssh.Channel(
     , openChannel
     , queueDataOverChannel
     , handleChannel
-    , setChannelHandler
+    , setChannelPayloadHandler
+    , setChannelCloseHandler
     -- * Miscelaneous
     , initialGlobalChannelsState
     , getLocalChannelNr
@@ -57,7 +58,9 @@ type Channel = MS.StateT ChannelInfo SshConnection
 data ChannelHandler = ChannelHandler {
       channelName :: SshString
       -- | Handles a given payload, using the 'ChannelInfo' in the 'Channel' state.
-    , channelHandler :: SshString -> Channel ChannelInfo
+    , handleChannelPayload :: SshString -> Channel ChannelInfo
+      -- | When a channel gets closed, this function is called to handle some cleanup
+    , handleChannelClose :: Channel ()
 }
 
 -- | Information about a specific channel, so we can keep a mapping of live channels
@@ -72,15 +75,23 @@ type Channels = MS.StateT GlobalChannelInfo SshConnection
 
 initialGlobalChannelsState = GlobalChannelInfo Map.empty [0 .. 2^31]
 
--- | Set the handler for a channel
-setChannelHandler :: (SshString -> Channel ChannelInfo) -> Channel ChannelInfo
-setChannelHandler handler = do
+-- | Set the payload handler for a channel
+setChannelPayloadHandler :: (SshString -> Channel ChannelInfo) -> Channel ChannelInfo
+setChannelPayloadHandler handler = do
     s <- MS.get
     let cih  = channelInfoHandler s
-        cih' = cih { channelHandler = handler }
+        cih' = cih { handleChannelPayload = handler }
         ret  = s { channelInfoHandler = cih' }
     return $ ret
 
+-- | Set the close handler for a channel
+setChannelCloseHandler :: (Channel ()) -> Channel ChannelInfo
+setChannelCloseHandler handler = do
+    s <- MS.get
+    let cih  = channelInfoHandler s
+        cih' = cih { handleChannelClose = handler }
+        ret  = s { channelInfoHandler = cih' }
+    return $ ret
 
 -- | Run the action of 'Channels ChannelInfo' on the initial 'GlobalChannelInfo', and at the end just return the resulting connection. Can be used for
 --   an execution loop, after which the connection should be closed
@@ -268,7 +279,7 @@ handleChannel (ChannelData nr payload) = do
     case info of
         Just cInfo -> do
             -- Let the handler do its stuff, get the result, update our map with the newly returned ChannelInfo, which can contain a brand new handler
-            let newChannel = channelHandler (channelInfoHandler cInfo) $ payload :: Channel ChannelInfo
+            let newChannel = handleChannelPayload (channelInfoHandler cInfo) $ payload :: Channel ChannelInfo
             (newChannelInfo, newState) <- MS.lift $ MS.runStateT newChannel cInfo
             modifyUsedChannel nr newChannelInfo
             return newState
