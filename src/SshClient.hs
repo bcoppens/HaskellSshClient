@@ -227,10 +227,8 @@ main = do
     -- Run the client loop, i.e. the real part
     result <- MS.execStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options cd) newState
 
-#ifdef DEBUG
     -- We might be being verbose, perhaps print out some statistics on the connection
     printDebug logDebug $ showTrafficStats result
-#endif
 
     -- We're done
     sClose connection

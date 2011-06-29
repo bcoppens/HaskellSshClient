@@ -17,10 +17,8 @@ module Ssh.Transport (
     -- * Encoding and decoding for 'Packet's
     , makeSshPacket
     , getSizes
-#ifdef DEBUG
     -- * Debug/Verbose
     , showTrafficStats
-#endif
 ) where
 
 import Control.Monad
@@ -297,7 +295,9 @@ decryptBytes c s = do
     return decrypted
 
 #ifdef DEBUG
--- | Show the stats of this connection
+-- | Show the stats of this connection, only works with -DDEBUG
 showTrafficStats :: SshTransportInfo -> String
 showTrafficStats info = "Stats:\nClient to Server: " ++ show (c2sStats info) ++ "\nServer to Client: " ++ show (s2cStats info)
+#else
+showTrafficStats _ = ""
 #endif
