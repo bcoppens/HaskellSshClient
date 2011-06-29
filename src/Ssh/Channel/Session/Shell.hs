@@ -110,15 +110,20 @@ requestShell minfo = do
     let shellReq = ChannelRequest nr "shell" False ""
     MS.lift $ sPutPacket shellReq
 
+    -- Back up the original terminal mode
+    originalTerminalModes <- MS.liftIO $ Term.getTerminalAttributes stdInput
+
     -- Set the terminal modes (TODO: unset them again??)
     MS.liftIO setTerminalModesStart
 
-    -- Update the channel info
+    -- Handle the payload
     info <- setChannelPayloadHandler $ handleShellRequest minfo
 
-    MS.liftIO $ forkIO $ shellReadClientLoop nr minfo
+    threadId <- MS.liftIO $ forkIO $ shellReadClientLoop nr minfo
 
-    return info
+    -- Set the close handler, and return this info
+    return $ addChannelCloseHandler info $ channelCloseHandler originalTerminalModes threadId
+
 
 -- | The main loop. Wait for the user to write data on standard input, and send that over
 --   Since we queue the data, 'Channel' will automatically queue our data, and send it over once the channel has been set up and the window size large enough.
@@ -153,4 +158,14 @@ handleShellRequest channelsLock payload = do
     MS.liftIO $ putStr $ map (toEnum . fromEnum) raw
     MS.liftIO $ hFlush stdout -- TODO: do this automatically?
     MS.get >>= return
+
+-- | Terminate this channel's thread, and restore the terminal to its original state when called
+channelCloseHandler :: Term.TerminalAttributes -> ThreadId -> Channel ()
+channelCloseHandler termAttrs id = MS.liftIO $ do
+    -- Kill the tread (TODO: let it commit suicide, killing is so violent :()
+    -- killThread id
+    -- Restore the terminal to it's original state (we disabled echo and so)
+    Term.setTerminalAttributes stdInput termAttrs Term.Immediately
+
+
 

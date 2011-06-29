@@ -16,7 +16,7 @@ module Ssh.Channel(
     , queueDataOverChannel
     , handleChannel
     , setChannelPayloadHandler
-    , setChannelCloseHandler
+    , addChannelCloseHandler
     -- * Miscelaneous
     , initialGlobalChannelsState
     , getLocalChannelNr
@@ -84,14 +84,13 @@ setChannelPayloadHandler handler = do
         ret  = s { channelInfoHandler = cih' }
     return $ ret
 
--- | Set the close handler for a channel
-setChannelCloseHandler :: (Channel ()) -> Channel ChannelInfo
-setChannelCloseHandler handler = do
-    s <- MS.get
+-- | Add a close handler for a channel
+addChannelCloseHandler :: ChannelInfo -> (Channel ()) -> ChannelInfo
+addChannelCloseHandler s handler =
     let cih  = channelInfoHandler s
         cih' = cih { handleChannelClose = handler }
         ret  = s { channelInfoHandler = cih' }
-    return $ ret
+    in  ret
 
 -- | Run the action of 'Channels ChannelInfo' on the initial 'GlobalChannelInfo', and at the end just return the resulting connection. Can be used for
 --   an execution loop, after which the connection should be closed
