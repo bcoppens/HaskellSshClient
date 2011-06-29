@@ -75,15 +75,21 @@ setTerminalModesStart = do
 
     attrs <- Term.getTerminalAttributes stdInput
 
-    let withouts = [    -- Don't echo stuff
+    let withouts = withoutModes attrs [    -- Don't echo stuff
                         Term.EnableEcho
-                        -- Flow control thingies: IXOFF, IXON, IXANY
+                        -- Flow control thingies: IXOFF, IXON, IXANY (TODO: IXANY)
                         , Term.StartStopInput
                         , Term.StartStopOutput
+                        -- No canonical mode (see further)
+                        , Term.ProcessInput
+                        , Term.ProcessOutput
                         -- Pass on keyboard interrupts (ctrl+c and so)
                         , Term.KeyboardInterrupts
                    ]
-    Term.setTerminalAttributes stdInput (withoutModes attrs withouts) Term.Immediately
+        -- Disable canonical mode (see man 3 termios). Basically disables line editing mode, read immediately returns once 1 (we define this) byte is available
+        -- withMinInput is the same as setting the VMIN control character of c_cc of termios_p. For this, ProcessInput (aka ICANON) should be on!
+        readOneByte = Term.withMinInput withouts 1
+    Term.setTerminalAttributes stdInput readOneByte  Term.Immediately
 
 -- | Request a remote shell on the channel.
 --   The MVar will contain the global 'Channels' data for this channel. Whenever *anyone* (either this code, or the caller of 'requestShell') wants to communicate
