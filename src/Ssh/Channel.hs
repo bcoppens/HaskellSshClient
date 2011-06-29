@@ -251,6 +251,9 @@ handleChannel (ChannelClose nr) = do
     -- Set this channel to closed locally
     closed <- updateInfoWith nr $ \info -> info { gotEof = True }
 
+    -- Now that the channel is closed, call the close handler of this channel:
+    MS.lift $ MS.runStateT (handleChannelClose (channelInfoHandler info)) info
+
     -- This channel is free again to be reused in our Channels state
     state  <- MS.get
     let newUsedChannels = Map.delete nr $ usedChannels state
