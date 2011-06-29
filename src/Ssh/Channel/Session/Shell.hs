@@ -13,6 +13,7 @@ import Data.Maybe
 import Data.Word
 
 import System.Posix.IO
+import System.IO
 import qualified System.Posix.Terminal as Term
 
 import qualified Control.Monad.State as MS
@@ -143,5 +144,6 @@ handleShellRequest channelsLock payload = do
     --printDebugLifted logDebug "This is the result of a shell request:"
     let raw = B.unpack payload
     MS.liftIO $ putStr $ map (toEnum . fromEnum) raw
+    MS.liftIO $ hFlush stdout -- TODO: do this automatically?
     MS.get >>= return
 
