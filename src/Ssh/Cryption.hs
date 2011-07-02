@@ -78,34 +78,38 @@ cbcAesDecrypt :: Int -> CryptoFunction
 cbcAesDecrypt ks key enc = do
     -- Decode in chunks of 128 bits
     let chunks = splitEvery 16 enc
-    cbcDecryptLoop (aesDecrypt ks) key chunks []
+    DList.toList `liftM` cbcDecryptLoop (aesDecrypt ks) key chunks DList.empty
 
 -- | Encrypt with AES with the specified key length in CBC mode
 cbcAesEncrypt :: Int -> CryptoFunction
 cbcAesEncrypt ks key dec = do
     -- Encrypt in chunks of 128 bits
     let chunks = splitEvery 16 dec
-    cbcEncryptLoop (aesEncrypt ks) key chunks []
+    DList.toList `liftM` cbcEncryptLoop (aesEncrypt ks) key chunks DList.empty
 
 -- | Generic decrypt with CBC. Takes a decryption function, a key, a ciphertext (split into chunks of the right blocksize) and updates the CryptionState accordingly.
-cbcDecryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> [Word8] -> [[Word8]] -> [Word8] -> CryptionState [Word8]
+cbcDecryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> [Word8] -> [[Word8]] -> DList.DList Word8 -> CryptionState (DList.DList Word8)
 cbcDecryptLoop _ _ [] acc = return acc
 cbcDecryptLoop decryptionFunction key (enc:encs) acc = do
     state <- stateVector `liftM` get
     let dec   = decryptionFunction key enc
         plain = cbcDec dec state
     put $ CryptionInfo enc
-    cbcDecryptLoop decryptionFunction key encs (acc++plain)
+
+    -- Accumulate using a DList. This is a lot faster than just keeping on concatenating [Word8]s :-) (TODO: use blaze-builder?)
+    cbcDecryptLoop decryptionFunction key encs $ DList.append acc $ DList.fromList plain
 
 -- | Generic encryption with CBC. Takes an encryption function, a key, the plaintext (split into chunks of the right blocksize), and updates the CryptionState accordingly
-cbcEncryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> [Word8] -> [[Word8]] -> [Word8] -> CryptionState [Word8]
+cbcEncryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> [Word8] -> [[Word8]] -> DList.DList Word8 -> CryptionState (DList.DList Word8)
 cbcEncryptLoop _ _ [] acc = return acc
 cbcEncryptLoop encryptionFunction key (dec:decs) acc = do
     state <- stateVector `liftM` get
     let toEnc = cbcEnc dec state
         enc   = encryptionFunction key toEnc
     put $ CryptionInfo enc
-    cbcEncryptLoop encryptionFunction key decs (acc++enc)
+
+    -- Accumulate using a DList. This is a lot faster than just keeping on concatenating [Word8]s :-) (TODO: use blaze-builder?)
+    cbcEncryptLoop encryptionFunction key decs $ DList.append acc $ DList.fromList enc
 
 -- | Decode with CBC
 cbcDec :: [Word8] -> [Word8] -> [Word8]
