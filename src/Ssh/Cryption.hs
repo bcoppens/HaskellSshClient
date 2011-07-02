@@ -31,6 +31,7 @@ import qualified Codec.Encryption.AES as AES
 import Codec.Utils
 import Data.LargeWord
 import Data.List.Split
+import qualified Data.DList as DList
 import Control.Monad
 import Control.Monad.State
 
@@ -122,14 +123,14 @@ ctrAesDecrypt :: Int -> CryptoFunction
 ctrAesDecrypt ks key enc = do
     -- Decode in chunks of 128 bits
     let chunks = splitEvery 16 enc
-    ctrDecryptLoop (aesEncrypt ks) 128 key chunks []
+    DList.toList `liftM` ctrDecryptLoop (aesEncrypt ks) 128 key chunks DList.empty
 
 -- | Encrypt with AES with the specified key length in CBC mode
 ctrAesEncrypt :: Int -> CryptoFunction
 ctrAesEncrypt ks key dec = do
     -- Encrypt in chunks of 128 bits
     let chunks = splitEvery 16 dec
-    ctrEncryptLoop (aesEncrypt ks) 128 key chunks []
+    DList.toList `liftM` ctrEncryptLoop (aesEncrypt ks) 128 key chunks DList.empty
 
 -- | Read a list of characters big endian as a big endian integer
 asBigEndian :: [Word8] -> Integer
@@ -155,7 +156,7 @@ padTo to with l = (replicate (to - length l) with) ++ l
 
 
 -- | Generic decrypt with CTR. Like 'cbcDecryptLoop', also takes block size in bits
-ctrDecryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> Int -> [Word8] -> [[Word8]] -> [Word8] -> CryptionState [Word8]
+ctrDecryptLoop :: ([Word8] -> [Word8] -> [Word8]) -> Int -> [Word8] -> [[Word8]] -> DList.DList Word8 -> CryptionState (DList.DList Word8)
 ctrDecryptLoop _ _ _ [] acc = return acc
 ctrDecryptLoop encryptionFunction bs key (enc:encs) acc = do
     -- Get our 128bit IV
@@ -174,7 +175,8 @@ ctrDecryptLoop encryptionFunction bs key (enc:encs) acc = do
 
     put $ CryptionInfo x'
 
-    ctrDecryptLoop encryptionFunction bs key encs (acc++plain)
+    -- Accumulate using a DList. This is a lot faster than just keeping on concatenating [Word8]s :-) (TODO: use blaze-builder?)
+    ctrDecryptLoop encryptionFunction bs key encs $ DList.append acc $ DList.fromList plain
 
 -- | Generic encryption with CBC. Like 'cbcEncryptLoop', and it also takes a block size in bits
 ctrEncryptLoop = ctrDecryptLoop
