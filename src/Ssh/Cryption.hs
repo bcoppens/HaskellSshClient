@@ -1,6 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings,CPP #-}
 
 -- | Cryptographic functionality for SSH. Define common encryption and decryption modes
+--   You can compile this with 2 modes: -DNOPURE, which uses unsafely performed OpenSSL bindings because they are faster.
+--   The other mode (default) uses the pure Codec.Encryption.AES from the Crypto package.
 module Ssh.Cryption (
       CryptionAlgorithm (..)
     , CryptionState (..)
@@ -27,13 +29,20 @@ import Data.Word
 import Data.Bits
 import qualified Data.ByteString.Lazy as B
 
-import qualified Codec.Encryption.AES as AES
 import Codec.Utils
 import Data.LargeWord
 import Data.List.Split
 import qualified Data.DList as DList
 import Control.Monad
 import Control.Monad.State
+
+#ifdef NOPURE
+import qualified OpenSSL.Cipher as OpenSSL
+import qualified Data.ByteString as BS
+import System.IO.Unsafe
+#else
+import qualified Codec.Encryption.AES as AES
+#endif
 
 import Ssh.Debug
 import Ssh.String
@@ -189,16 +198,47 @@ ctrEncryptLoop = ctrDecryptLoop
 -- Encryption/Decryption functions --
 -------------------------------------
 
+-- Function signatures
+
+-- | Encrypt with AES: keysize, key (keysize bits), plaintext (128 bits)
+aesEncrypt :: Int -> [Word8] -> [Word8] -> [Word8]
+
+-- | Decrypt: keysize, key (keysize bits), ciphertext (128 bits)
+aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
+
+#ifdef NOPURE
+
+zeroIV = BS.pack $ [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ] -- ^ 16 0 bytes
+
+-- We don't let OpenSSL do the CBC/CTR mode, we'll do it ourselves, so we create a new context every time. I do this because this lets me change
+-- everything rather localizedly...
+-- This means we don't need to care about the unsafe side effect that the context is destructively updated, since we don't re-use it.
+-- This also means that we have to chose CBC, and let it XOR (CBC) with a 0 IV...
+aesEncrypt 256 key plain = BS.unpack $ unsafePerformIO $ do
+    ctx <- OpenSSL.newAESCtx OpenSSL.Encrypt (BS.pack $ take 32 key) zeroIV
+    OpenSSL.aesCBC ctx $ BS.pack plain
+
+-- Same remarks as above
+aesDecrypt 256 key enc = BS.unpack $ unsafePerformIO $ do
+    ctx <- OpenSSL.newAESCtx OpenSSL.Decrypt (BS.pack $ take 32 key) zeroIV
+    OpenSSL.aesCBC ctx $ BS.pack enc
+
+#else
+
 -- DAMN THIS IS FUGLY!!!! ### TODO FIXME
 convertString1 = fromInteger . fromOctets 256
 convertString = fromInteger . fromOctets 256
 
--- | Encrypt with AES: keysize, key (keysize bits), plaintext (128 bits)
-aesEncrypt :: Int -> [Word8] -> [Word8] -> [Word8]
+
 aesEncrypt 256 key plain =
     padToInWord8 16 $ AES.encrypt (convertString1 (take 32 key) :: Word256) (convertString plain :: Word128)
 
--- | Decrypt: keysize, key (keysize bits), ciphertext (128 bits)
-aesDecrypt :: Int -> [Word8] -> [Word8] -> [Word8]
+
 aesDecrypt 256 key enc =
-    padToInWord8 16 $ AES.decrypt (convertString1 (take 32 key) :: Word256) (convertString enc :: Word128)
+    let k =  {-# SCC "Take32Key" #-} (take 32 key)
+        ke = {-# SCC "convertKey" #-} (convertString1 k :: Word256)
+        e = {-# SCC "convertEnc" #-} (convertString enc :: Word128)
+        dec = {-# SCC "doDecrypt" #-} AES.decrypt ke e
+    in padToInWord8 16 $ dec
+
+#endif
