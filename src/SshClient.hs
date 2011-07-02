@@ -164,7 +164,9 @@ clientLoop username hostname options mCommand cd = do
                 loop = do
                     packet <- MS.lift $ sGetPacket
                     handleChannel packet
-                    loop
+
+                    globalInfo <- MS.get
+                    continueOrExit globalInfo loop
 
       doShell ti = do -- request a shell remotely
         channel <- openChannel sessionHandler ""            -- Open a channel
@@ -199,10 +201,14 @@ clientLoop username hostname options mCommand cd = do
                     connection' <- MS.lift $ MS.get
                     MS.liftIO $ putMVar safeInfo (globalInfo', connection')
 
-                    -- We opened a channel. If 0 channels are in use, this means we/the server closed all our channel(s) => terminate our loop; otherwise => keep running
-                    case Map.size $ usedChannels globalInfo' of
-                        0         -> return ()
-                        otherwise -> loop safeInfo sshSocket
+                    continueOrExit globalInfo' $ loop safeInfo sshSocket
+
+      -- We opened a channel in our client loop. If 0 channels are in use, this means we/the server closed all our channel(s)
+      -- => terminate our loop; otherwise => keep running
+      continueOrExit globalInfo loopAction =
+        case Map.size $ usedChannels globalInfo of
+            0         -> return ()
+            otherwise -> loopAction
 
 main :: IO ()
 main = do
