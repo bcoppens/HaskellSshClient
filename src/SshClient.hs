@@ -107,11 +107,11 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 -- | Parse commandline argument for username@hostname. If just hostname is specified, get username from USER environment variable.
 --   If no commandline argument is given, use bartcopp@localhost for debugging purposes
 --   Returns (username, hostname). Since we first resolve the hostname, that's a regular 'String', since we'll send the username, that's an 'SshString'
-getUserAndHostNameFromArguments :: [String] -> IO (SshString, String)
-getUserAndHostNameFromArguments args = do
-    if null args || args == ["localhost"]
+getUserAndHostNameFromArguments :: Maybe String -> IO (SshString, String)
+getUserAndHostNameFromArguments arg = do
+    if isNothing arg || arg == Just "localhost"
         then return ("bartcopp", "localhost")
-        else parseUserAndHostName $ head args
+        else parseUserAndHostName $ fromJust arg
 
 -- | Parses argument & returns username@hostname info like documented in 'getUserAndHostNameFromArguments'
 parseUserAndHostName :: String -> IO (SshString, String)
@@ -130,8 +130,8 @@ parseUserAndHostName s = do
             convert = map (toEnum . fromEnum)
 
 -- | This is the main client loop, performing first the authentication, then opening channels, etc...
-clientLoop :: SshString -> SshString -> Options -> ConnectionData -> SshConnection ()
-clientLoop username hostname options cd = do
+clientLoop :: SshString -> SshString -> Options -> Maybe String -> ConnectionData -> SshConnection ()
+clientLoop username hostname options mCommand cd = do
     ti <- MS.get
 
     -- Which authentication methods do we support? password always, but perhaps the user specified a private key file (DSA only for now)
@@ -146,11 +146,18 @@ clientLoop username hostname options cd = do
     authOk <- authenticate username hostname "ssh-connection" authMethods
     MS.liftIO $ printDebug logDebug $ "Authentication OK? " ++ show authOk
 
-    runGlobalChannelsToConnection initialGlobalChannelsState (doShell ti) -- demoExec
+    -- Depending on the extra options given on the command line, open a remote shell, or execute a command remotely
+    let action = case mCommand of
+            Nothing      -> doShell ti
+            Just command -> execRemote $ B.pack $ map (toEnum . fromEnum) command
+
+    -- Perform the user-specified action on this channel
+    runGlobalChannelsToConnection initialGlobalChannelsState action
+
     where
-      demoExec = do -- execute a command remotely, and show the result. As a test, execute cat /proc/cpuinfo
+      execRemote command = do -- execute a command remotely, and show the result
         channel <- openChannel sessionHandler ""                -- Open a channel
-        insertChannel channel $ requestExec "cat /proc/cpuinfo" -- Request Exec
+        insertChannel channel $ requestExec command             -- Request Exec
         loop -- Loop
             where
                 loop :: Channels ()
@@ -201,10 +208,15 @@ main :: IO ()
 main = do
     -- Parse the arguments
     args    <- getArgs
-    (options, location) <- getOptions args
+    (options, moreargs) <- getOptions args
 
     -- Get username and hostname
-    (username, hostname) <- getUserAndHostNameFromArguments location
+    -- The first non-option argument (if it exists, if it doesn't -> DEBUGGING localhist) is the location
+    -- If there are extra arguments given after the location, these can be used for, for example, executing a remote command
+    let (hostArgs, extraArgs) = case moreargs of
+            []   -> (Nothing, Nothing)
+            h:hs -> (Just h, listToMaybe hs)
+    (username, hostname) <- getUserAndHostNameFromArguments hostArgs
 
     -- Connect to the server
     connection <- connect' hostname $ port options
@@ -225,7 +237,7 @@ main = do
         doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
 
     -- Run the client loop, i.e. the real part
-    result <- MS.execStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options cd) newState
+    result <- MS.execStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options extraArgs cd) newState
 
     -- We might be being verbose, perhaps print out some statistics on the connection
     printDebug logDebug $ showTrafficStats result
