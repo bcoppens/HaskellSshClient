@@ -235,10 +235,5 @@ aesEncrypt 256 key plain =
 
 
 aesDecrypt 256 key enc =
-    let k =  {-# SCC "Take32Key" #-} (take 32 key)
-        ke = {-# SCC "convertKey" #-} (convertString1 k :: Word256)
-        e = {-# SCC "convertEnc" #-} (convertString enc :: Word128)
-        dec = {-# SCC "doDecrypt" #-} AES.decrypt ke e
-    in padToInWord8 16 $ dec
-
+    padToInWord8 16 $ AES.decrypt (convertString1 (take 32 key) :: Word256) (convertString enc :: Word128)
 #endif
