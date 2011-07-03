@@ -237,6 +237,10 @@ sGetPacket = do
 
     printDebugLifted logDebugExtended $ "Got packet: " ++ show packet
 
+    let packetBytes  = packlen + 1
+        totalBytes   = macLen + packetBytes + padlen
+    logStats S2C totalBytes packetBytes padlen macLen
+
     MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
 
     return $ annotatePacketWithPayload packet payload
