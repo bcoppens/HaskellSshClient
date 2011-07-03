@@ -23,6 +23,7 @@ import Data.Digest.Pure.SHA
 import Ssh.NetworkIO
 import Ssh.Packet
 import Ssh.KeyExchangeAlgorithm
+import Ssh.PublicKeyAlgorithm
 import Ssh.HostKeyAlgorithm
 import Ssh.ConnectionData
 import Ssh.Cryption
@@ -118,6 +119,14 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
 
         -- Now we have all data that is computed in the key exchange, store this data
         cd = ConnectionData sId (makeWord8 sharedSecret) (makeWord8 exchangeHash) c2sIV s2cIV c2sEncKey s2cEncKey c2sIntKey s2cIntKey
+
+    -- Verify if the dh_H_signature the server sent, is actually signed by the server's (accepted) key
+    let signature = dh_H_signature dhReply
+        doVerify  = verify $ hostKeyPublicKeyAlgorithm hka
+    signatureOk <- MS.liftIO $ doVerify hostKey exchangeHash signature
+
+    -- TODO: act on this info!
+    printDebugLifted logDebug $ "Signature signed by Host Key? " ++ show signatureOk
 
     printDebugLifted logLowLevelDebug $ "Shared Secret: \n" ++ debugRawStringData sharedSecret
 
