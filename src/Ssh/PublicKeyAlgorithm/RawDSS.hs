@@ -6,6 +6,7 @@ module Ssh.PublicKeyAlgorithm.RawDSS (
     , rawDSSVerifier
 ) where
 
+import Control.Monad
 import Data.Binary.Get
 import Data.Binary.Put
 import Data.Maybe
@@ -41,15 +42,25 @@ putDSSSignature r s = do
     let blob = runPut $ encodeRS r s
     putString blob
 
+-- | Get a DSS signature into an (r, s) pair, these are 160 bit integers to be read rawly
+getDSSSignature :: Get (Integer, Integer)
+getDSSSignature = do
+    getString -- TODO: verify it is "ssh-dss"
+    r <- asBigEndian `liftM` (replicateM 20 getWord8)
+    s <- asBigEndian `liftM` (replicateM 20 getWord8)
+    return (r, s)
+
+-- | We have to sign all data after digesting it with sha1. SHA1 is required by the DSA standard (FIPS 186-2)
+doDigest :: SshString -> BS.ByteString
+doDigest toDigest =
+    let digestRaw = SHA1.hash $ B.unpack toDigest :: SHA1.Word160
+        -- The digest is actually a rather useless Word160, convert it back to a more useful (strict) ByteString
+    in  BS.pack $ padToInWord8 20 $ SHA1.toInteger digestRaw
+
 -- | Sign with a keypair some string, and turn it into something SSH recognizes as a signature
 dsaSign :: SomeKeyPair -> SshString -> IO SshString
 dsaSign kp toSign = do
-    let -- signDigestedDataWithDSA signs data digested with sha1. SHA1 is required by the DSA standard (FIPS 186-2)
-        digestRaw = SHA1.hash $ B.unpack toSign :: SHA1.Word160
-
-        -- The digest is actually a rather useless Word160, convert it back to a more useful (strict) ByteString
-        digested = BS.pack $ padToInWord8 20 $ SHA1.toInteger digestRaw
-
+    let digested = doDigest toSign
         -- the pk is a SomeKeyPair. Cast it (sigh) to a real DSAPubKey
         mDsaKeyPair = toKeyPair kp
         dsaKeyPair  = fromJust mDsaKeyPair
@@ -75,8 +86,25 @@ rawDSSKeyBlob pubkey =
         putMPInt   g
         putMPInt   y
 
+getRawDSSKeyBlob :: Get DSA.DSAPubKey
+getRawDSSKeyBlob = do
+    getString -- TODO: verify it is ssh-dss
+    p <- getMPInt
+    q <- getMPInt
+    g <- getMPInt
+    y <- getMPInt
+    return $ DSA.tupleToDSAPubKey (p, q, g, y)
+
 dssFingerprint :: SshString -> SshString
 dssFingerprint _ = "unimplemented"
+
+-- | Verify whether a public key (1st argument)'s signature (3rd argument) of the unhashed string (2nd argument) is correct
+dssVerify :: SshString -> SshString -> SshString -> IO Bool
+dssVerify pubKey toSign signed = do
+    let (r, s)   = runGet getDSSSignature signed
+        digested = doDigest toSign
+        key      = runGet getRawDSSKeyBlob pubKey
+    DSA.verifyDigestedDataWithDSA key digested (r, s)
 
 -- | Read key information from a private key file with which we can sign. Also get the public key information from this file
 mkRawDSSSigner :: String -> IO PublicKeyAlgorithm
@@ -95,8 +123,9 @@ mkRawDSSSigner privateKeyFile = do
     -- And the public key blob
     let pubKeyBlob = rawDSSKeyBlob keyPair
 
-    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") signer pubKeyBlob dssFingerprint
+    return $ PublicKeyAlgorithm "ssh-dss" dssVerify signer pubKeyBlob dssFingerprint
+
 
 -- | Only verifies, doesn't sign. Trying to sign will result in an error
 rawDSSVerifier :: PublicKeyAlgorithm
-rawDSSVerifier = PublicKeyAlgorithm "ssh-dss" (error "VERIFY") (error "Cannot sign with a verifier") (error "Signing only has no public key info") dssFingerprint
+rawDSSVerifier = PublicKeyAlgorithm "ssh-dss" dssVerify (error "Cannot sign with a verifier") (error "Signing only has no public key info") dssFingerprint
