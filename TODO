@@ -5,3 +5,8 @@
 * J-PAKE
 * RSA stuff
 * Document (in)compatibility with RFCs
+* UTF8
+* Various TODOs everywhere
+* Less dependencies on IO (especially in Monad Stacks)
+* Cabalize
+* Handle errors (MAC, invalid host key cert, etc)
