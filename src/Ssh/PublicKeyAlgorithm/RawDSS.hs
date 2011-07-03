@@ -3,6 +3,7 @@
 -- | Digital Signature Standard signatures, in the 'raw' format (as specified in RFC 4253), using OpenSSL DSA routines
 module Ssh.PublicKeyAlgorithm.RawDSS (
       mkRawDSSSigner
+    , rawDSSVerifier
 ) where
 
 import Data.Binary.Get
@@ -74,6 +75,9 @@ rawDSSKeyBlob pubkey =
         putMPInt   g
         putMPInt   y
 
+dssFingerprint :: SshString -> SshString
+dssFingerprint _ = "unimplemented"
+
 -- | Read key information from a private key file with which we can sign. Also get the public key information from this file
 mkRawDSSSigner :: String -> IO PublicKeyAlgorithm
 mkRawDSSSigner privateKeyFile = do
@@ -91,4 +95,8 @@ mkRawDSSSigner privateKeyFile = do
     -- And the public key blob
     let pubKeyBlob = rawDSSKeyBlob keyPair
 
-    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") signer pubKeyBlob
+    return $ PublicKeyAlgorithm "ssh-dss" (error "VERIFY") signer pubKeyBlob dssFingerprint
+
+-- | Only verifies, doesn't sign. Trying to sign will result in an error
+rawDSSVerifier :: PublicKeyAlgorithm
+rawDSSVerifier = PublicKeyAlgorithm "ssh-dss" (error "VERIFY") (error "Cannot sign with a verifier") (error "Signing only has no public key info") dssFingerprint

@@ -14,6 +14,7 @@ import Ssh.Packet
 import Ssh.Transport
 import Ssh.ConnectionData
 import Ssh.String
+import Ssh.HostKeyAlgorithm
 
 data KeyExchangeAlgorithm = KeyExchangeAlgorithm {
       kexName :: SshString

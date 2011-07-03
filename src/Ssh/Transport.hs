@@ -41,6 +41,7 @@ import Ssh.NetworkIO
 import Ssh.ConnectionData
 import Ssh.Debug
 import Ssh.String
+import Ssh.HostKeyAlgorithm
 
 -- | Information needed to encrypt and verify a packet in a single direction
 data SshTransport = SshTransport {
@@ -62,8 +63,8 @@ emptyTraffic = TrafficStats 0 0 0 0 0
 -- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
       socket :: SshSocket
-{-  , kex_alg :: KeyExchangeAlgorithm
-    , serverhost_key_alg :: HostKeyAlgorithm -}
+--  , kex_alg :: KeyExchangeAlgorithm
+    , serverHostKeyAlgorithm :: HostKeyAlgorithm
     , client2server :: SshTransport
     , clientVector :: [Word8]
     , clientSeq :: Int32

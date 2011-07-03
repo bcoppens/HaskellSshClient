@@ -5,9 +5,15 @@ module Ssh.HostKeyAlgorithm (
 ) where
 
 import Ssh.String
+import Ssh.PublicKeyAlgorithm
 
 -- | Checks for a servername the host key (potentially including certificates), while perhaps reading from file whether this key corresponds to what we know,
 --   and whether the signature is actually signed by said key.
 data HostKeyAlgorithm = HostKeyAlgorithm {
-    checkHostKey :: SshString -> SshString -> SshString -> IO Bool -- ^ host name -> key/certs -> signature -> ok?
+      hostKeyAlgorithmName :: SshString
+    , checkHostKey :: SshString -> SshString -> IO Bool -- ^ host name -> key/certs -> ok?
+    , hostKeyPublicKeyAlgorithm :: PublicKeyAlgorithm
 }
+
+instance Show HostKeyAlgorithm where
+    show = show . hostKeyAlgorithmName

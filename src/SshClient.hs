@@ -37,6 +37,8 @@ import Ssh.Packet
 import Ssh.KeyExchange
 import Ssh.Cryption
 import Ssh.ConnectionData
+import Ssh.HostKeyAlgorithm
+import Ssh.HostKeyAlgorithm.HostsFile
 import Ssh.KeyExchangeAlgorithm
 import Ssh.KeyExchangeAlgorithm.DiffieHellman
 import Ssh.KeyExchange
@@ -90,6 +92,8 @@ clientHashMacs = [ sha1HashMac ]
 rsaHostKey = PublicKeyAlgorithm "ssh-rsa" (error "RSA HOSTKEY") (error "RSA HOSTKEY") (error "RSA HOSTKEY")
 
 clientHostKeys = [rsaHostKey]
+
+serverHostKeyAlgos = [ HostKeyAlgorithm "ssh-dss" (checkHostKeyInFile rawDSSVerifier) rawDSSVerifier ]
 
 dhGroup1KEXAlgo = KeyExchangeAlgorithm "diffie-hellman-group1-sha1" (diffieHellmanGroup dhGroup1 {-sha1-})
 clientKEXAlgos = [dhGroup1KEXAlgo]
@@ -237,10 +241,10 @@ main = do
     -- Do the Key Exchange, initialize the SshConnection
     sshSock <- mkSocket connection
 
-    let tinfo = mkTransportInfo sshSock (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing
+    let tinfo = mkTransportInfo sshSock (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing
 
     (cd, newState) <- flip MS.runStateT tinfo $
-        doKex clientVersionString serverVersion clientKEXAlgos clientHostKeys clientCryptos clientCryptos clientHashMacs clientHashMacs
+        doKex clientVersionString serverVersion clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs
 
     -- Run the client loop, i.e. the real part
     result <- MS.execStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options extraArgs cd) newState

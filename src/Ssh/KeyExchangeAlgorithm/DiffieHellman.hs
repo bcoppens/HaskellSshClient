@@ -23,6 +23,7 @@ import Data.Digest.Pure.SHA
 import Ssh.NetworkIO
 import Ssh.Packet
 import Ssh.KeyExchangeAlgorithm
+import Ssh.HostKeyAlgorithm
 import Ssh.ConnectionData
 import Ssh.Cryption
 import Ssh.Transport
