@@ -86,6 +86,13 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
 
     printDebugLifted logLowLevelDebug $ show dhReply
 
+    -- Verify that this server's host key is known
+    let hka = serverHostKeyAlgorithm transportInfo
+        hostKey = dh_hostKeyAndCerts dhReply
+    hostKeyOk <- MS.liftIO $ checkHostKey hka "<<server name>>" hostKey
+    printDebugLifted logDebug $ "Host key accepted: " ++ show hostKeyOk
+    -- TODO: act on this information!
+
     -- We expect the server to put into use the new keys and confirm that. So get their packet confirming that
     newKeys <- sGetPacket
 
