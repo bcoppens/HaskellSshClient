@@ -1,0 +1,7 @@
+* Make SCP
+* Use blaze-builder
+* Handle packets of different layers correctly when a session is active (rekeying!)
+* Server
+* J-PAKE
+* RSA stuff
+* Document (in)compatibility with RFCs
