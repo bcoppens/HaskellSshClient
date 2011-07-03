@@ -22,7 +22,7 @@ checkHostKeyInFile algo hostName pubKey = do
     where
         readUntilAcceptOrReject str = do
             putStrLn str
-            l <- readLn
+            l <- getLine
             case map toLower l of
                 "y"       -> return True
                 "n"       -> return False
