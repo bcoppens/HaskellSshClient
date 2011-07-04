@@ -46,9 +46,12 @@ putDSSSignature r s = do
 getDSSSignature :: Get (Integer, Integer)
 getDSSSignature = do
     getString -- TODO: verify it is "ssh-dss"
-    r <- asBigEndian `liftM` (replicateM 20 getWord8)
-    s <- asBigEndian `liftM` (replicateM 20 getWord8)
-    return (r, s)
+    -- The (r,s) pair is wrapped in a string blob
+    rsBlob <- getString
+    return $ flip runGet rsBlob $ do
+        r <- asBigEndian `liftM` (replicateM 20 getWord8)
+        s <- asBigEndian `liftM` (replicateM 20 getWord8)
+        return (r, s)
 
 -- | We have to sign all data after digesting it with sha1. SHA1 is required by the DSA standard (FIPS 186-2)
 doDigest :: SshString -> BS.ByteString
