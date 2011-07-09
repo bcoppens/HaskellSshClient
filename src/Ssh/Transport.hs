@@ -77,22 +77,18 @@ data SshTransportInfo = SshTransportInfo {
     -- | Initially, this is 'Nothing. The first KEX fills this out. A rekey will detect the Just cd, and re-use its sessionId
     , maybeConnectionData :: Maybe ConnectionData
 
-#ifdef DEBUG
+    -- | Stats may be needed to decide when to rekey
     , c2sStats :: TrafficStats
     , s2cStats :: TrafficStats
-#endif
 } deriving Show
 
 -- | Convencience method: most data can correctly assume that maybeConnectionData is actually a Just ConnectionData. Unwrap that automatically with a decent name
 connectionData = fromJust . maybeConnectionData
 
 
--- | Because the contents/signature of a SshTransportInfo vary according to -DDEBUG, provide a convenient wrapper constructor that is fixed in its signature
-mkTransportInfo s c2s cv cs s2c sv ss cd =
-    SshTransportInfo s c2s cv cs s2c sv ss cd
-#ifdef DEBUG
-        emptyTraffic emptyTraffic
-#endif
+-- | Provide a convenient wrapper constructor that automatically initiates empty traffic
+mkTransportInfo s hka c2s cv cs s2c sv ss cd =
+    SshTransportInfo s hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
@@ -103,7 +99,6 @@ data LogStats = C2S | S2C
 
 -- | Log stats: automatically adds a packet. Other arguments: total bytes, packetbytes, paddingbytes, macbytes
 logStats :: LogStats -> Int -> Int -> Int -> Int -> SshConnection ()
-#ifdef DEBUG
 logStats l tb packb padb macb | l == C2S = MS.modify $ \i -> i { c2sStats = inc $ c2sStats i }
                               | l == S2C = MS.modify $ \i -> i { s2cStats = inc $ s2cStats i }
                               where
@@ -114,9 +109,6 @@ logStats l tb packb padb macb | l == C2S = MS.modify $ \i -> i { c2sStats = inc 
                                     paddingBytes = padb + paddingBytes stats,
                                     macBytes     = macb + macBytes stats
                                 }
-#else
-logStats _ _ _ _ _ = return ()
-#endif
 
 -- | Wrap an SSH packet payload with a length header and its padding
 makeSshPacketWithoutMac :: SshTransport -> SshString -> SshString -> SshString
@@ -299,10 +291,6 @@ decryptBytes c s = do
     MS.put $ transportInfo { serverVector = stateVector newState }
     return decrypted
 
-#ifdef DEBUG
--- | Show the stats of this connection, only works with -DDEBUG
+-- | Show the stats of this connection
 showTrafficStats :: SshTransportInfo -> String
 showTrafficStats info = "Stats:\nClient to Server: " ++ show (c2sStats info) ++ "\nServer to Client: " ++ show (s2cStats info)
-#else
-showTrafficStats _ = ""
-#endif
