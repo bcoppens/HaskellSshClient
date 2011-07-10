@@ -1,1 +1,3 @@
 This is a toy project to write an SSH client in Haskell. IT DOES NOT WORK! Nor is it really intended to do anything useful in the future. It's crappy and wrong code. It's just so that other people can critique my code :) (And, there's a *lot* to comment on, sigh... :( )
+
+Also, for clarity's sake: if you'd *ever* trust this code for something even remotely secure, you're obviously insane. It hasn't been implemented properly, meaning that I'd not even checked for even the biggest vulnerabilities in the protocol implementation, leave alone that I'd have checked this code against all kinds of side channels. It's just written for me, to write something in Haskell that's somewhat more complicated than a silly IRC bot or so :)
