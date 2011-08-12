@@ -1,0 +1,44 @@
+Name:                Ssh
+Version:             0.0
+Description:         A toy project to write an SSH client in Haskell.
+License:             GPL
+License-file:        LICENSE
+Author:              Bart Coppens
+Maintainer:          kde@bartcoppens.be
+Build-Type:          Simple
+Cabal-Version:       >=1.2
+
+Source-Repository head
+  Type: git
+  Location: git://github.com/bcoppens/HaskellSshClient.git
+
+Flag noPureAES
+  Description: Nopure use unsafely performed OpenSSL bindings because they are faster for AES encryption. If False, use Crypto's Codec.Encryption.AES
+  default: True
+
+Executable SshClient
+  Main-is:           SshClient.hs
+  Build-Depends:     base >= 3 && < 5
+
+  Hs-Source-Dirs: src
+
+  Build-Depends:
+    base >= 4 && < 5,
+    binary >= 0.5 && < 1.0,
+    bytestring,
+    network,
+    containers,
+    unix,
+    split,
+    mtl,
+    transformers,
+    binary,
+    network-bytestring,
+    Crypto,
+    dlist,
+    HsOpenSSL,
+    SHA
+
+  If flag(noPureAES)
+    Cpp-Options:
+      -DNOPURE
