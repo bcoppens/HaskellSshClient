@@ -90,7 +90,7 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
     -- Verify that this server's host key is known
     let hka = serverHostKeyAlgorithm transportInfo
         hostKey = dh_hostKeyAndCerts dhReply
-    hostKeyOk <- MS.liftIO $ checkHostKey hka "<<server name>>" hostKey
+    hostKeyOk <- MS.liftIO $ checkHostKey hka (hostName transportInfo) hostKey
     printDebugLifted logDebug $ "Host key accepted: " ++ show hostKeyOk
     -- TODO: act on this information!
 

@@ -11,7 +11,7 @@ import Ssh.PublicKeyAlgorithm
 --   and whether the signature is actually signed by said key.
 data HostKeyAlgorithm = HostKeyAlgorithm {
       hostKeyAlgorithmName :: SshString
-    , checkHostKey :: SshString -> SshString -> IO Bool -- ^ host name -> key/certs -> ok?
+    , checkHostKey :: String -> SshString -> IO Bool -- ^ host name -> key/certs -> ok?
     , hostKeyPublicKeyAlgorithm :: PublicKeyAlgorithm
 }
 

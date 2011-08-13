@@ -63,6 +63,7 @@ emptyTraffic = TrafficStats 0 0 0 0 0
 -- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
       socket :: SshSocket
+    , hostName :: String -- ^ either a hostname, an IP, or either of those with a port number appended after a ':'
 --  , kex_alg :: KeyExchangeAlgorithm
     , serverHostKeyAlgorithm :: HostKeyAlgorithm
     , client2server :: SshTransport
@@ -87,8 +88,8 @@ connectionData = fromJust . maybeConnectionData
 
 
 -- | Provide a convenient wrapper constructor that automatically initiates empty traffic
-mkTransportInfo s hka c2s cv cs s2c sv ss cd =
-    SshTransportInfo s hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic
+mkTransportInfo s hn hka c2s cv cs s2c sv ss cd =
+    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO

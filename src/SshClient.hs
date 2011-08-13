@@ -60,15 +60,15 @@ debug = putStrLn
 
 data Options = Options {
       privateKeyFile :: Maybe String
-    , port :: Int
+    , port :: Maybe Int
 } deriving Show
 
-defaultOptions = Options Nothing 22
+defaultOptions = Options Nothing Nothing
 
 options :: [OptDescr (Options -> Options)]
 options = [
       Option [] ["privatekeyfile"] (OptArg ((\f opts -> opts { privateKeyFile = Just f }) . fromMaybe "") "file") "Location of the (DSA) private key file to use, if any"
-    , Option ['p'] ["port"] (OptArg ((\p opts -> opts { port = read p } ) . fromMaybe "22") "port") "Port to connect to"
+    , Option ['p'] ["port"] (OptArg ((\p opts -> opts { port = Just $ read p } ) . fromMaybe "") "port") "Port to connect to"
   ]
 
 -- | Result: first are the options, second should be the 'non-option' user@hostname
@@ -110,7 +110,7 @@ processPacket p = putStrLn $ "processPacket:" ++ show p
 -- TODO: get port!
 -- | Parse commandline argument for username@hostname. If just hostname is specified, get username from USER environment variable.
 --   If no commandline argument is given, use bartcopp@localhost for debugging purposes
---   Returns (username, hostname). Since we first resolve the hostname, that's a regular 'String', since we'll send the username, that's an 'SshString'
+--   Returns (username, hostname, hostnameString). Since we first resolve the hostname, that's a regular 'String', since we'll send the username, that's an 'SshString'.
 getUserAndHostNameFromArguments :: Maybe String -> IO (SshString, String)
 getUserAndHostNameFromArguments arg = do
     if isNothing arg || arg == Just "localhost"
@@ -228,8 +228,13 @@ main = do
             h:hs -> (Just h, listToMaybe hs)
     (username, hostname) <- getUserAndHostNameFromArguments hostArgs
 
+    let portNr = fromMaybe 22 $ port options
+        hostnameString = case port options of
+            Nothing -> hostname
+            Just p  -> hostname ++ ":" ++ show p
+
     -- Connect to the server
-    connection <- connect' hostname $ port options
+    connection <- connect' hostname portNr
     --hSetBuffering connection $ BlockBuffering Nothing
 
     -- Get the server's version string, send our version string
@@ -241,7 +246,7 @@ main = do
     -- Do the Key Exchange, initialize the SshConnection
     sshSock <- mkSocket connection
 
-    let tinfo = mkTransportInfo sshSock (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing
+    let tinfo = mkTransportInfo sshSock hostnameString (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing
 
     (cd, newState) <- flip MS.runStateT tinfo $
         doKex clientVersionString serverVersion clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs

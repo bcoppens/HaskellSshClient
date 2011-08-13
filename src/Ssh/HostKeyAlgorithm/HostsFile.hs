@@ -12,10 +12,10 @@ import Ssh.PublicKeyAlgorithm
 
 -- TODO: actually do the file stuff
 
-checkHostKeyInFile :: PublicKeyAlgorithm -> SshString -> SshString -> IO Bool
+checkHostKeyInFile :: PublicKeyAlgorithm -> String -> SshString -> IO Bool
 checkHostKeyInFile algo hostName pubKey = do
     let fp  = unpackToString $ fingerprint algo pubKey
-        str = "The fingerprint for server " ++ (unpackToString hostName) ++ " is " ++ fp ++ ". Accept? y/n"
+        str = "The fingerprint for server " ++ hostName ++ " is " ++ fp ++ ". Accept? y/n"
 
     -- For the moment, just ask the user if he accepts this key
     readUntilAcceptOrReject str
