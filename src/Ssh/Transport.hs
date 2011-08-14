@@ -8,6 +8,7 @@ module Ssh.Transport (
     , SshTransportInfo (..)
     , ConnectionData (..)
     , SshConnection (..)
+    , TrafficStats (..)
     , mkTransportInfo
     , connectionData
     -- * Reading/Writing 'Packet's over the network

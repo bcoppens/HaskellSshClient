@@ -208,6 +208,9 @@ clientLoop username hostname options mCommand cd = do
                         then return ()
                         else handleChannel packet >> return ()
 
+                    -- Maybe it is time to start rekeying!
+                    MS.lift $ checkToRekey connection
+
                     -- Put back the changed state
                     globalInfo' <- MS.get
                     connection' <- MS.lift $ MS.get
@@ -221,6 +224,17 @@ clientLoop username hostname options mCommand cd = do
         case Map.size $ usedChannels globalInfo of
             0         -> return ()
             otherwise -> loopAction
+
+      -- A check to see if we should rekey, and if we should do it: actually send a message to start it
+      checkToRekey connection =
+        if bytes > 750 -- For now: a pretty low number to debug it. TODO: use the right values from the RFC
+          then do
+            printDebugLifted logDebug $ "Already " ++ show bytes ++ " bytes sent, starting a rekey"
+            startRekey clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs
+          else
+            return $ handlePacket connection
+        where
+          bytes = totalBytes . c2sStats $ connection
 
 handlePackets :: Packet -> SshConnection Bool
 handlePackets (Ignore s) = printDebugLifted logDebug "Got a packet 'Ignore', and we print this message" >> return True

@@ -3,6 +3,7 @@
 -- | Generic Key Exchange facilities. Performs the key exchange
 module Ssh.KeyExchange(
       doKex
+    , startRekey
 ) where
 
 
@@ -123,3 +124,12 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     printDebugLifted logLowLevelDebug "KEX DONE?"
 
     return connectiondata
+
+
+-- | Start a new key exchange from an existing connection. It returns a new packet handler!
+startRekey :: [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection (Packet -> SshConnection Bool)
+startRekey clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs  = do
+    cookie <- MS.liftIO $ BS.unpack `liftM` randBytes 16
+    sPutPacket $ KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
+
+    return undefined
