@@ -185,6 +185,7 @@ clientLoop username hostname options mCommand cd = do
 
         loop safeInfo sshSocket -- Loop
             where
+                loop :: MVar (GlobalChannelInfo, SshTransportInfo) -> SshSocket -> Channels ()
                 loop safeInfo sshSocket = do
                     -- Wait for input on the socket
                     MS.liftIO $ waitForSockInput sshSocket
@@ -198,7 +199,14 @@ clientLoop username hostname options mCommand cd = do
 
                     -- Read & handle packet
                     packet <- MS.lift $ sGetPacket
-                    handleChannel packet
+
+                    -- Try to handle lower levels of packets
+                    handledPacket <- MS.lift $ handlePacket connection packet
+
+                    -- If we handled the packet at a lower level, we won't process it again, otherwise it might be a channel packet
+                    if handledPacket
+                        then return ()
+                        else handleChannel packet >> return ()
 
                     -- Put back the changed state
                     globalInfo' <- MS.get
@@ -213,6 +221,10 @@ clientLoop username hostname options mCommand cd = do
         case Map.size $ usedChannels globalInfo of
             0         -> return ()
             otherwise -> loopAction
+
+handlePackets :: Packet -> SshConnection Bool
+handlePackets (Ignore s) = printDebugLifted logDebug "Got a packet 'Ignore', and we print this message" >> return True
+handlePackets _          = return False
 
 main :: IO ()
 main = do
@@ -246,7 +258,7 @@ main = do
     -- Do the Key Exchange, initialize the SshConnection
     sshSock <- mkSocket connection
 
-    let tinfo = mkTransportInfo sshSock hostnameString (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing
+    let tinfo = mkTransportInfo sshSock hostnameString (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing handlePackets
 
     (cd, newState) <- flip MS.runStateT tinfo $
         doKex clientVersionString serverVersion clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs

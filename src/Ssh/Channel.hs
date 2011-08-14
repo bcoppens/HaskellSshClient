@@ -294,4 +294,4 @@ handleChannel (ChannelData nr payload) = do
 handleChannel p = do
     state <- MS.get
     printDebugLifted logDebugExtended "HandleChannel: ignored packet"
-    return $ error "Handle Channel: ignored packet"
+    return $ error "Handle Channel: ignored packet handled"

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP,FlexibleInstances #-}
 
 -- | The generic part of SSH's Transport Layer Protocol (RFC 4253).
 --   Uses crypto functions to encrypt/decrypt packets, figure out their sizes, and checks their HMAC
@@ -60,6 +60,9 @@ data TrafficStats = TrafficStats {
 -- | Empty (0) traffic stats
 emptyTraffic = TrafficStats 0 0 0 0 0
 
+instance Show (Packet -> SshConnection Bool) where
+    show _ = "Not implemented: show Packet -> SshConnection Bool"
+
 -- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
       socket :: SshSocket
@@ -81,6 +84,8 @@ data SshTransportInfo = SshTransportInfo {
     -- | Stats may be needed to decide when to rekey
     , c2sStats :: TrafficStats
     , s2cStats :: TrafficStats
+
+    , handlePacket :: Packet -> SshConnection Bool -- ^ Handle a packet, returns True if it was handled, false if it didn't handle it
 } deriving Show
 
 -- | Convencience method: most data can correctly assume that maybeConnectionData is actually a Just ConnectionData. Unwrap that automatically with a decent name
@@ -88,8 +93,8 @@ connectionData = fromJust . maybeConnectionData
 
 
 -- | Provide a convenient wrapper constructor that automatically initiates empty traffic
-mkTransportInfo s hn hka c2s cv cs s2c sv ss cd =
-    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic
+mkTransportInfo s hn hka c2s cv cs s2c sv ss cd hp =
+    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic hp
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
