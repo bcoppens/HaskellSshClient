@@ -80,6 +80,12 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     sPutPacket clientKex
     serverKex <- sGetPacket -- TODO assert this is a KEXInit packet
 
+    continueKex clientVersionString serverVersionString clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs
+
+-- | The Kex can be done multiple times, at the moment we have a split between the first and the later ones. But both share the
+--   actual computations, which are located in this function
+--continueKex :: 
+continueKex clientVersionString serverVersionString clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
     printDebugLifted logLowLevelDebug "ServerKEX before filtering:"
     printDebugLifted logLowLevelDebug $ show serverKex
 
@@ -118,18 +124,27 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
                           serverVector = server2ClientIV connectiondata,
                           client2server = SshTransport c2sfun s2cmacfun,
                           clientVector = client2ServerIV connectiondata,
-                          maybeConnectionData = Just connectiondata
+                          maybeConnectionData = Just connectiondata,
+                          isRekeying = False -- In case we were rekeying, this has been finished
                          }
 
     printDebugLifted logLowLevelDebug "KEX DONE?"
 
     return connectiondata
 
-
 -- | Start a new key exchange from an existing connection. It returns a new packet handler!
 startRekey :: [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection (Packet -> SshConnection Bool)
 startRekey clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs  = do
     cookie <- MS.liftIO $ BS.unpack `liftM` randBytes 16
-    sPutPacket $ KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
+    let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
+        clientKexInitPayload = runPut $ putPacket clientKex
 
-    return undefined
+    -- We are currently rekeying!
+    MS.modify $ \s -> s { isRekeying = True }
+
+    sPutPacket clientKex
+
+    previousHandler <- handlePacket `liftM` MS.get
+    return $ \p -> printDebugLifted logLowLevelDebug "WE SHOULD BE REKEYING NOW" >> case p of
+        (KEXInit _ _ _ _ _ _ _ _) -> continueKex undefined undefined clientKexInitPayload p clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs >> return True
+        otherwise                 -> previousHandler p

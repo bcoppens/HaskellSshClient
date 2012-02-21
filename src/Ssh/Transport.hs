@@ -86,6 +86,8 @@ data SshTransportInfo = SshTransportInfo {
     , c2sStats :: TrafficStats
     , s2cStats :: TrafficStats
 
+    , isRekeying :: Bool -- ^ Keeps track of whether or not we are currently performing a rekey. When True, we shouldn't rekey AGAIN
+
     , handlePacket :: Packet -> SshConnection Bool -- ^ Handle a packet, returns True if it was handled, false if it didn't handle it
 } deriving Show
 
@@ -93,9 +95,9 @@ data SshTransportInfo = SshTransportInfo {
 connectionData = fromJust . maybeConnectionData
 
 
--- | Provide a convenient wrapper constructor that automatically initiates empty traffic
+-- | Provide a convenient wrapper constructor that automatically initiates empty traffic and isRekeying to False
 mkTransportInfo s hn hka c2s cv cs s2c sv ss cd hp =
-    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic hp
+    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic False hp
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO

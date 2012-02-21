@@ -209,7 +209,8 @@ clientLoop username hostname options mCommand cd = do
                         else handleChannel packet >> return ()
 
                     -- Maybe it is time to start rekeying!
-                    MS.lift $ checkToRekey connection
+                    newHandler <- MS.lift $ checkToRekey connection
+                    MS.lift $ MS.modify $ \c -> c { handlePacket = newHandler }
 
                     -- Put back the changed state
                     globalInfo' <- MS.get
@@ -227,14 +228,15 @@ clientLoop username hostname options mCommand cd = do
 
       -- A check to see if we should rekey, and if we should do it: actually send a message to start it
       checkToRekey connection =
-        if bytes > 750 -- For now: a pretty low number to debug it. TODO: use the right values from the RFC
+        if bytes > 750 && canRekey -- For now: a pretty low number to debug it. TODO: use the right values from the RFC
           then do
             printDebugLifted logDebug $ "Already " ++ show bytes ++ " bytes sent, starting a rekey"
             startRekey clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs
           else
             return $ handlePacket connection
         where
-          bytes = totalBytes . c2sStats $ connection
+          bytes = totalBytes . c2sStats $ connection -- TODO: since last (re)key instead of since beginning
+          canRekey = not $ isRekeying connection -- We don't want to initiate a rekey when we are currently already rekeying!
 
 handlePackets :: Packet -> SshConnection Bool
 handlePackets (Ignore s) = printDebugLifted logDebug "Got a packet 'Ignore', and we print this message" >> return True
