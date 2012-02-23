@@ -228,7 +228,7 @@ clientLoop username hostname options mCommand cd = do
 
       -- A check to see if we should rekey, and if we should do it: actually send a message to start it
       checkToRekey connection =
-        if bytes > 750 && canRekey -- For now: a pretty low number to debug it. TODO: use the right values from the RFC
+        if False -- TODO renable bytes > 750 && canRekey -- For now: a pretty low number to debug it. TODO: use the right values from the RFC
           then do
             printDebugLifted logDebug $ "Already " ++ show bytes ++ " bytes sent, starting a rekey"
             startRekey clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs

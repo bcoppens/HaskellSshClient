@@ -93,7 +93,6 @@ diffieHellmanGroup (DHGroup p g) rawClientKexInit rawServerKexInit = do
     -- hostKeyOk <- MS.liftIO $ checkHostKey hka (hostName transportInfo) hostKey
     let hostKeyOk = True
     printDebugLifted logDebug $ "Host key accepted: " ++ show hostKeyOk
-    printDebugLifted logDebug $ "Mu" ++ show (clientVersionString transportInfo)
     -- TODO: act on this information!
 
     -- We expect the server to put into use the new keys and confirm that. So get their packet confirming that
