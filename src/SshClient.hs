@@ -80,7 +80,7 @@ getOptions argv =
         (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
     where header = "Usage: SshClient [OPTIONS...] [user@]hostname"
 
-clientVersionString = "SSH-2.0-BartSSHaskell-0.0.1 This is crappy software!\r\n"
+clientVersion = "SSH-2.0-BartSSHaskell-0.0.1 This is crappy software!\r\n"
 
 clientCryptos = [
       (CryptionAlgorithm "aes256-ctr" (ctrAesEncrypt 256) (ctrAesDecrypt 256) 16),
@@ -268,16 +268,16 @@ main = do
     -- Get the server's version string, send our version string
     serverVersion <- getServerVersionString connection
     printDebug logLowLevelDebug $ show serverVersion
-    sendAll connection clientVersionString
+    sendAll connection clientVersion
 
     -- TODO remove runState!
     -- Do the Key Exchange, initialize the SshConnection
     sshSock <- mkSocket connection
 
-    let tinfo = mkTransportInfo sshSock hostnameString (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing handlePackets
+    let tinfo = mkTransportInfo sshSock hostnameString (error "HostKeyAlgo") (error "Client2ServerTransport") [] 0 (error "Server2ClientTransport") [] 0 Nothing handlePackets clientVersion serverVersion
 
     (cd, newState) <- flip MS.runStateT tinfo $
-        doKex clientVersionString serverVersion clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs
+        doKex clientKEXAlgos serverHostKeyAlgos clientCryptos clientCryptos clientHashMacs clientHashMacs
 
     -- Run the client loop, i.e. the real part
     result <- MS.execStateT (clientLoop username (B.pack $ map (toEnum . fromEnum) $ hostname) options extraArgs cd) newState

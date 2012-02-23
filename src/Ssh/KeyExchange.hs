@@ -58,8 +58,8 @@ filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHa
 --   Needs the version strings of both client and server. Needs a list of all client-side supported algorithms.
 --   We also need a function that can be used to decode and decrypt packets using a given 'Transport'.
 --
-doKex :: SshString -> SshString -> [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection ConnectionData
-doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
+doKex :: [KeyExchangeAlgorithm] -> [HostKeyAlgorithm] -> [CryptionAlgorithm] -> [CryptionAlgorithm] -> [HashMac] -> [HashMac] -> SshConnection ConnectionData
+doKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
     -- Prepare our KEXInit packet
 
     -- Get 16 bytes of randomness for our cookie.
@@ -80,12 +80,12 @@ doKex clientVersionString serverVersionString clientKEXAlgos clientHostKeys clie
     sPutPacket clientKex
     serverKex <- sGetPacket -- TODO assert this is a KEXInit packet
 
-    continueKex clientVersionString serverVersionString clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs
+    continueKex clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs
 
 -- | The Kex can be done multiple times, at the moment we have a split between the first and the later ones. But both share the
 --   actual computations, which are located in this function
 --continueKex :: 
-continueKex clientVersionString serverVersionString clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
+continueKex clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs = do
     printDebugLifted logLowLevelDebug "ServerKEX before filtering:"
     printDebugLifted logLowLevelDebug $ show serverKex
 
@@ -105,7 +105,7 @@ continueKex clientVersionString serverVersionString clientKexInitPayload serverK
     printDebugLifted logLowLevelDebug $ show filteredServerKex
 
     -- Perform the Key Exchange method supported by both us and the server
-    connectiondata <- handleKex kexFn clientVersionString serverVersionString clientKexInitPayload serverKexInitPayload
+    connectiondata <- handleKex kexFn clientKexInitPayload serverKexInitPayload
 
     -- We have exchanged keys, confirm to the server that the new keys can be put into use. The handleKex already confirmed the server sent theirs!
     sPutPacket NewKeys
@@ -146,5 +146,5 @@ startRekey clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashM
 
     previousHandler <- handlePacket `liftM` MS.get
     return $ \p -> printDebugLifted logLowLevelDebug "WE SHOULD BE REKEYING NOW" >> case p of
-        (KEXInit _ _ _ _ _ _ _ _) -> continueKex undefined undefined clientKexInitPayload p clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs >> return True
+        (KEXInit _ _ _ _ _ _ _ _) -> continueKex clientKexInitPayload p clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs >> return True
         otherwise                 -> previousHandler p

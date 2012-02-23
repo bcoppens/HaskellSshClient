@@ -81,6 +81,9 @@ data SshTransportInfo = SshTransportInfo {
 
     -- | Initially, this is 'Nothing. The first KEX fills this out. A rekey will detect the Just cd, and re-use its sessionId
     , maybeConnectionData :: Maybe ConnectionData
+    -- | We need to keep track of the version strings of both client and server, so they can be (re)used in the key (re)exchange
+    , clientVersionString :: SshString
+    , serverVersionString :: SshString
 
     -- | Stats may be needed to decide when to rekey
     , c2sStats :: TrafficStats
@@ -96,8 +99,8 @@ connectionData = fromJust . maybeConnectionData
 
 
 -- | Provide a convenient wrapper constructor that automatically initiates empty traffic and isRekeying to False
-mkTransportInfo s hn hka c2s cv cs s2c sv ss cd hp =
-    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd emptyTraffic emptyTraffic False hp
+mkTransportInfo s hn hka c2s cv cs s2c sv ss cd hp cvstring svstring =
+    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd cvstring svstring emptyTraffic emptyTraffic False hp
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO

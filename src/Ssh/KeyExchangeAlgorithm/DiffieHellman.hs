@@ -68,8 +68,8 @@ filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r'
 
 --TODO use hash
 -- | Perform Diffie-Hellman key exchange
-diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshString -> SshString -> SshConnection ConnectionData
-diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit rawServerKexInit = do
+diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshConnection ConnectionData
+diffieHellmanGroup (DHGroup p g) rawClientKexInit rawServerKexInit = do
     transportInfo <- MS.get
 
     -- Compute and initialize the various DH parameters
@@ -90,8 +90,10 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
     -- Verify that this server's host key is known
     let hka = serverHostKeyAlgorithm transportInfo
         hostKey = dh_hostKeyAndCerts dhReply
-    hostKeyOk <- MS.liftIO $ checkHostKey hka (hostName transportInfo) hostKey
+    -- hostKeyOk <- MS.liftIO $ checkHostKey hka (hostName transportInfo) hostKey
+    let hostKeyOk = True
     printDebugLifted logDebug $ "Host key accepted: " ++ show hostKeyOk
+    printDebugLifted logDebug $ "Mu" ++ show (clientVersionString transportInfo)
     -- TODO: act on this information!
 
     -- We expect the server to put into use the new keys and confirm that. So get their packet confirming that
@@ -101,8 +103,8 @@ diffieHellmanGroup (DHGroup p g) clientVersion serverVersion rawClientKexInit ra
 
     -- Compute the shared secret
     let sharedSecret = dhComputeSharedSecret (dh_f dhReply) x p
-        cvs = filterNewlines clientVersion
-        svs = filterNewlines serverVersion
+        cvs = filterNewlines $ clientVersionString transportInfo
+        svs = filterNewlines $ serverVersionString transportInfo
         hostKey = dh_hostKeyAndCerts dhReply -- AND certs? ###
 
         -- With all this data, we can now compute the exchange hash

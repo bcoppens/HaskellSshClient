@@ -18,7 +18,7 @@ import Ssh.HostKeyAlgorithm
 
 data KeyExchangeAlgorithm = KeyExchangeAlgorithm {
       kexName :: SshString
-    , handleKex :: SshString -> SshString -> SshString -> SshString -> SshConnection ConnectionData
+    , handleKex :: SshString -> SshString -> SshConnection ConnectionData
 }
 
 instance Show KeyExchangeAlgorithm where
