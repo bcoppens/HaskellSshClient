@@ -93,14 +93,11 @@ continueKex clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientC
         hkFn  = fromJust $ find (\x -> hostKeyAlgorithmName x == hkAlg) clientHostKeys
         serverKexInitPayload = rawPacket serverKex
 
-    -- Set the host key algorithm
-    MS.modify $ \s -> s { serverHostKeyAlgorithm = hkFn }
-
     printDebugLifted logLowLevelDebug "ServerKEX after filtering:"
     printDebugLifted logLowLevelDebug $ show filteredServerKex
 
     -- Perform the Key Exchange method supported by both us and the server
-    connectiondata <- handleKex kexFn clientKexInitPayload serverKexInitPayload
+    connectiondata <- handleKex kexFn hkFn clientKexInitPayload serverKexInitPayload
 
     -- We have exchanged keys, confirm to the server that the new keys can be put into use. The handleKex already confirmed the server sent theirs!
     sPutPacket NewKeys

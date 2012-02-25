@@ -68,8 +68,7 @@ instance Show (Packet -> SshConnection Bool) where
 data SshTransportInfo = SshTransportInfo {
       socket :: SshSocket
     , hostName :: String -- ^ either a hostname, an IP, or either of those with a port number appended after a ':'
---  , kex_alg :: KeyExchangeAlgorithm
-    , serverHostKeyAlgorithm :: HostKeyAlgorithm
+
     , client2server :: SshTransport
     , clientVector :: [Word8]
     , clientSeq :: Int32
@@ -99,8 +98,8 @@ connectionData = fromJust . maybeConnectionData
 
 
 -- | Provide a convenient wrapper constructor that automatically initiates empty traffic and isRekeying to False, with NONE as the crypto and mac methods, and 0 as initial sequence numbers
-mkTransportInfo s hn hka hp cvstring svstring =
-    SshTransportInfo s hn hka initialTransport [] 0 initialTransport [] 0 Nothing cvstring svstring emptyTraffic emptyTraffic False hp
+mkTransportInfo s hn hp cvstring svstring =
+    SshTransportInfo s hn initialTransport [] 0 initialTransport [] 0 Nothing cvstring svstring emptyTraffic emptyTraffic False hp
     where
         initialTransport = SshTransport noCrypto noHashMac
 

@@ -68,8 +68,8 @@ filterNewlines s = B.filter (not . (\x -> x == convert '\n' || x == convert '\r'
 
 --TODO use hash
 -- | Perform Diffie-Hellman key exchange
-diffieHellmanGroup :: DHGroup -> SshString -> SshString -> SshConnection ConnectionData
-diffieHellmanGroup (DHGroup p g) rawClientKexInit rawServerKexInit = do
+diffieHellmanGroup :: DHGroup -> HostKeyAlgorithm -> SshString -> SshString -> SshConnection ConnectionData
+diffieHellmanGroup (DHGroup p g) serverHostKeyAlgorithm rawClientKexInit rawServerKexInit = do
     transportInfo <- MS.get
 
     -- Compute and initialize the various DH parameters
@@ -88,8 +88,7 @@ diffieHellmanGroup (DHGroup p g) rawClientKexInit rawServerKexInit = do
     printDebugLifted logLowLevelDebug $ show dhReply
 
     -- Verify that this server's host key is known
-    let hka = serverHostKeyAlgorithm transportInfo
-        hostKey = dh_hostKeyAndCerts dhReply
+    let hostKey = dh_hostKeyAndCerts dhReply
     -- hostKeyOk <- MS.liftIO $ checkHostKey hka (hostName transportInfo) hostKey
     let hostKeyOk = True
     printDebugLifted logDebug $ "Host key accepted: " ++ show hostKeyOk
@@ -123,7 +122,7 @@ diffieHellmanGroup (DHGroup p g) rawClientKexInit rawServerKexInit = do
 
     -- Verify if the dh_H_signature the server sent, is actually signed by the server's (accepted) key
     let signature = dh_H_signature dhReply
-        doVerify  = verify $ hostKeyPublicKeyAlgorithm hka
+        doVerify  = verify $ hostKeyPublicKeyAlgorithm serverHostKeyAlgorithm
     signatureOk <- MS.liftIO $ doVerify hostKey exchangeHash signature
 
     -- TODO: act on this info!
