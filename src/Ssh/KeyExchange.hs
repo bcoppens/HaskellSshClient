@@ -69,12 +69,7 @@ doKex clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs s
     let clientKex = KEXInit B.empty cookie (map kexName clientKEXAlgos) (map hostKeyAlgorithmName clientHostKeys) (map cryptoName clientCryptos) (map cryptoName serverCryptos) (map hashName clientHashMacs) (map hashName serverHashMacs)
 
     -- Set up the transports
-    let initialTransport     = SshTransport noCrypto noHashMac -- TODO this should only be initialized for the *first* Kex, not for rekeying!
-        clientKexInitPayload = runPut $ putPacket clientKex
-        clientKexPacket      = makeSshPacket initialTransport $ clientKexInitPayload
-
-    -- Initialize the state to be able to send packets
-    MS.modify $ \s -> s { client2server = initialTransport, server2client = initialTransport }
+    let clientKexInitPayload = runPut $ putPacket clientKex
 
     -- Send our KEXInit, wait for their KEXInit
     sPutPacket clientKex

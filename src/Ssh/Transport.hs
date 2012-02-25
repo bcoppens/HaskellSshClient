@@ -98,9 +98,11 @@ data SshTransportInfo = SshTransportInfo {
 connectionData = fromJust . maybeConnectionData
 
 
--- | Provide a convenient wrapper constructor that automatically initiates empty traffic and isRekeying to False
-mkTransportInfo s hn hka c2s cv cs s2c sv ss cd hp cvstring svstring =
-    SshTransportInfo s hn hka c2s cv cs s2c sv ss cd cvstring svstring emptyTraffic emptyTraffic False hp
+-- | Provide a convenient wrapper constructor that automatically initiates empty traffic and isRekeying to False, with NONE as the crypto and mac methods, and 0 as initial sequence numbers
+mkTransportInfo s hn hka hp cvstring svstring =
+    SshTransportInfo s hn hka initialTransport [] 0 initialTransport [] 0 Nothing cvstring svstring emptyTraffic emptyTraffic False hp
+    where
+        initialTransport = SshTransport noCrypto noHashMac
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
