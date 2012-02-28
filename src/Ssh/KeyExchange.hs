@@ -112,13 +112,18 @@ continueKex clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientC
         c2smac = head $ mac_c2s filteredServerKex
         c2smacfun = fromJust $ find (\x -> hashName x == c2smac) serverHashMacs
 
-    MS.modify $ \s -> s { server2client = SshTransport s2cfun s2cmacfun,
-                          serverVector = server2ClientIV connectiondata,
-                          client2server = SshTransport c2sfun s2cmacfun,
-                          clientVector = client2ServerIV connectiondata,
+    MS.modify $ \s -> s {
+                          serverState = (serverState s) {
+                            transport = SshTransport s2cfun s2cmacfun,
+                            vector    = server2ClientIV connectiondata
+                          },
+                          clientState = (clientState s) {
+                            transport = SshTransport c2sfun c2smacfun,
+                            vector    = client2ServerIV connectiondata
+                          },
                           maybeConnectionData = Just connectiondata,
                           isRekeying = False -- In case we were rekeying, this has been finished
-                         }
+                        }
 
     printDebugLifted logLowLevelDebug "KEX DONE?"
 

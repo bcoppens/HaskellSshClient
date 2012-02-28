@@ -9,6 +9,7 @@ module Ssh.Transport (
     , ConnectionData (..)
     , SshConnection (..)
     , TrafficStats (..)
+    , TransportChangingState (..)
     , mkTransportInfo
     , connectionData
     -- * Reading/Writing 'Packet's over the network
@@ -64,44 +65,54 @@ emptyTraffic = TrafficStats 0 0 0 0 0
 instance Show (Packet -> SshConnection Bool) where
     show _ = "Not implemented: show Packet -> SshConnection Bool"
 
+-- | Keep track of the state of a single-direction part of the transport that changes over time
+--   due to the protocol itself (i.e, (re)KEX, encryption, or simply sending bytes)
+data TransportChangingState = TransportChangingState {
+      transport :: SshTransport
+    , vector :: [Word8]
+    , seqNr :: Int32
+    , statistics :: TrafficStats -- ^ Stats may be needed to decide when to rekey
+} deriving Show
+
 -- | The state of the SSH Transport info in two directions: server to client, and client to server. Includes the socket to send info over
 data SshTransportInfo = SshTransportInfo {
       socket :: SshSocket
     , hostName :: String -- ^ either a hostname, an IP, or either of those with a port number appended after a ':'
 
-    , client2server :: SshTransport
-    , clientVector :: [Word8]
-    , clientSeq :: Int32
-    , server2client :: SshTransport
-    , serverVector :: [Word8]
-    , serverSeq :: Int32
+    , clientState :: TransportChangingState
+    , serverState :: TransportChangingState
+
     -- compression
     -- languages
 
     -- | Initially, this is 'Nothing. The first KEX fills this out. A rekey will detect the Just cd, and re-use its sessionId
     , maybeConnectionData :: Maybe ConnectionData
+
     -- | We need to keep track of the version strings of both client and server, so they can be (re)used in the key (re)exchange
     , clientVersionString :: SshString
     , serverVersionString :: SshString
-
-    -- | Stats may be needed to decide when to rekey
-    , c2sStats :: TrafficStats
-    , s2cStats :: TrafficStats
 
     , isRekeying :: Bool -- ^ Keeps track of whether or not we are currently performing a rekey. When True, we shouldn't rekey AGAIN
 
     , handlePacket :: Packet -> SshConnection Bool -- ^ Handle a packet, returns True if it was handled, false if it didn't handle it
 } deriving Show
 
--- | Convencience method: most data can correctly assume that maybeConnectionData is actually a Just ConnectionData. Unwrap that automatically with a decent name
+-- | Convenience method: most data can correctly assume that maybeConnectionData is actually a Just ConnectionData. Unwrap that automatically with a decent name
 connectionData = fromJust . maybeConnectionData
 
 
 -- | Provide a convenient wrapper constructor that automatically initiates empty traffic and isRekeying to False, with NONE as the crypto and mac methods, and 0 as initial sequence numbers
 mkTransportInfo s hn hp cvstring svstring =
-    SshTransportInfo s hn initialTransport [] 0 initialTransport [] 0 Nothing cvstring svstring emptyTraffic emptyTraffic False hp
+    SshTransportInfo s hn initialState initialState Nothing cvstring svstring False hp
     where
         initialTransport = SshTransport noCrypto noHashMac
+        initialState     = TransportChangingState initialTransport [] 0 emptyTraffic
+
+-- | Convenience method that gets the client to server transport of a 'Transport
+client2server = transport . clientState
+
+-- | Convenience method that gets the server to client transport of a 'Transport
+server2client = transport . serverState
 
 -- | We keep around the SSH Transport State when interacting with the server (it changes for every packet sent/received)
 type SshConnection = MS.StateT SshTransportInfo IO
@@ -112,16 +123,20 @@ data LogStats = C2S | S2C
 
 -- | Log stats: automatically adds a packet. Other arguments: total bytes, packetbytes, paddingbytes, macbytes
 logStats :: LogStats -> Int -> Int -> Int -> Int -> SshConnection ()
-logStats l tb packb padb macb | l == C2S = MS.modify $ \i -> i { c2sStats = inc $ c2sStats i }
-                              | l == S2C = MS.modify $ \i -> i { s2cStats = inc $ s2cStats i }
+logStats l tb packb padb macb | l == C2S = MS.modify $ \i -> i { clientState = inc $! clientState i }
+                              | l == S2C = MS.modify $ \i -> i { serverState = inc $! serverState i }
                               where
-                                inc stats = stats {
-                                    packets      = 1 + packets stats,
-                                    totalBytes   = tb + totalBytes stats,
-                                    packetBytes  = packb + packetBytes stats,
-                                    paddingBytes = padb + paddingBytes stats,
-                                    macBytes     = macb + macBytes stats
-                                }
+                                inc state =
+                                    let stats  = statistics state
+                                        stats' = stats {
+                                            packets      = 1 + packets stats,
+                                            totalBytes   = tb + totalBytes stats,
+                                            packetBytes  = packb + packetBytes stats,
+                                            paddingBytes = padb + paddingBytes stats,
+                                            macBytes     = macb + macBytes stats
+                                        }
+                                        meh = state { statistics = stats' }
+                                     in meh
 
 -- | Wrap an SSH packet payload with a length header and its padding
 makeSshPacketWithoutMac :: SshTransport -> SshString -> SshString -> SshString
@@ -172,8 +187,9 @@ sPutPacket packet = do
         macKeySize = hashKeySize hmac
         macKey = take macKeySize $ client2ServerIntKey $ connectionData transportInfo
         macFun = hashFunction $ mac $ client2server transportInfo
-        cseq = runPut $ putWord32 $ (toEnum . fromEnum) $ clientSeq transportInfo
-        macBytes = B.unpack $ B.append cseq rawPacket
+        clientSeq = seqNr . clientState $ transportInfo
+        clientSeqEncoded = runPut $ putWord32 $ (toEnum . fromEnum) $ clientSeq
+        macBytes = B.unpack $ B.append clientSeqEncoded rawPacket
         computedMac = macFun macKey macBytes
 
     -- Encrypt packet, and send it. Send the HMAC afterwards
@@ -189,7 +205,8 @@ sPutPacket packet = do
         paddingBytes = length encBytes - packetBytes
     logStats C2S totalBytes packetBytes paddingBytes macBytes
 
-    MS.modify $ \ti -> ti { clientSeq = 1 + clientSeq ti }
+    -- We sent a packet, so the client to server sequence number has to be increased
+    MS.modify $ \ti -> ti { clientState = (clientState ti) { seqNr = 1 + clientSeq } }
 
 
 -- | Read a packet from the socket, decrypt it/checks MAC if needed, and decodes into a real 'Packet'
@@ -226,8 +243,9 @@ sGetPacket = do
     -- Compute the HMAC ourselves, and check if corresponds to the HMAC appended to the packet on the wire
     macBytes <- getBlock macLen
     let restPacketBytes = take payloadRestSize restBytesDecrypted
-        sseq = runPut $ putWord32 $ (toEnum . fromEnum) $ serverSeq transportInfo
-        toMacBytes = (B.unpack sseq) ++ firstBytes ++ restBytesDecrypted -- includes length fields and padding as well
+        serverSeq = seqNr . serverState $ transportInfo
+        serverSeqEncoded = runPut $ putWord32 $ (toEnum . fromEnum) $ serverSeq
+        toMacBytes = (B.unpack serverSeqEncoded) ++ firstBytes ++ restBytesDecrypted -- includes length fields and padding as well
         computedMac = macFun macKey toMacBytes
         macOK = macBytes == computedMac
 
@@ -247,7 +265,8 @@ sGetPacket = do
         totalBytes   = macLen + packetBytes + padlen
     logStats S2C totalBytes packetBytes padlen macLen
 
-    MS.modify $ \ti -> ti { serverSeq = 1 + serverSeq ti }
+    -- We sent a packet, so the client to server sequence number has to be increased
+    MS.modify $ \ti -> ti { serverState = (serverState ti) { seqNr = 1 + serverSeq } }
 
     return $ annotatePacketWithPayload packet payload
 
@@ -285,11 +304,13 @@ encryptBytes :: [Word8] -> SshConnection [Word8]
 encryptBytes s = do
     transportInfo <- MS.get
     let c2s = client2server transportInfo
-        v = clientVector transportInfo
+        v = vector . clientState $ transportInfo
         crypt = encrypt $ crypto c2s
         key = client2ServerEncKey $ connectionData transportInfo
         (encrypted, newState) = MS.runState (crypt key s) $ CryptionInfo v
-    MS.put $ transportInfo { clientVector = stateVector newState }
+
+        newClientState = (clientState transportInfo) { vector = stateVector newState }
+    MS.put $ transportInfo { clientState = newClientState }
     return encrypted
 
 -- | Decrypt bytes with the decryption specified for server to client, keeping the state needed for CBC
@@ -297,13 +318,17 @@ decryptBytes :: CryptoFunction -> [Word8] -> SshConnection [Word8]
 decryptBytes c s = do
     transportInfo <- MS.get
     let s2c = server2client transportInfo
-        v = serverVector transportInfo
+        v = vector . serverState $ transportInfo
         crypt = decrypt $ crypto s2c
         key = server2ClientEncKey $ connectionData transportInfo
         (decrypted, newState) = MS.runState (crypt key s) $ CryptionInfo v
-    MS.put $ transportInfo { serverVector = stateVector newState }
+
+        newServerState = (serverState transportInfo) { vector = stateVector newState }
+    MS.put $ transportInfo { serverState = newServerState }
     return decrypted
 
 -- | Show the stats of this connection
 showTrafficStats :: SshTransportInfo -> String
-showTrafficStats info = "Stats:\nClient to Server: " ++ show (c2sStats info) ++ "\nServer to Client: " ++ show (s2cStats info)
+showTrafficStats info = "Stats:\nClient to Server: " ++ showStats clientState ++ "\nServer to Client: " ++ showStats serverState
+    where
+        showStats stateFun = show . statistics . stateFun $ info

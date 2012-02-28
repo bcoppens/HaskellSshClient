@@ -235,7 +235,7 @@ clientLoop username hostname options mCommand cd = do
           else
             return $ handlePacket connection
         where
-          bytes = totalBytes . c2sStats $ connection -- TODO: since last (re)key instead of since beginning
+          bytes = totalBytes . statistics . clientState $ connection -- TODO: since last (re)key instead of since beginning
           canRekey = not $ isRekeying connection -- We don't want to initiate a rekey when we are currently already rekeying!
 
 handlePackets :: Packet -> SshConnection Bool
