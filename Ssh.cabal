@@ -33,7 +33,6 @@ Executable SshClient
     mtl,
     transformers,
     binary,
-    network-bytestring,
     Crypto,
     dlist,
     HsOpenSSL,
