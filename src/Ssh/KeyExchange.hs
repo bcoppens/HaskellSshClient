@@ -18,6 +18,8 @@ import Data.Maybe
 import Data.List
 import qualified Data.ByteString.Lazy as B
 
+import Safe
+
 -- Non-'standard' functionality
 import OpenSSL.BN -- modexp, random Integers
 import OpenSSL.Random -- random bytes
@@ -86,10 +88,10 @@ continueKex clientKexInitPayload serverKex clientKEXAlgos clientHostKeys clientC
 
     -- The server's KEXInit probably contains a lot of methods we don't support, throw them away, and get the first KEX method we and the server support
     let filteredServerKex = filterKEXInit clientKEXAlgos clientHostKeys clientCryptos serverCryptos clientHashMacs serverHashMacs serverKex
-        kex   = head $ kex_algos filteredServerKex
+        kex   = headDef (error "No mutually supported key exchange algorithms found!") $ kex_algos filteredServerKex
         kexFn = fromJust $ find (\x -> kexName x == kex) clientKEXAlgos
         -- TODO: selecting this algorithm is more complicated?
-        hkAlg = head $ host_key_algos filteredServerKex
+        hkAlg = headDef (error "No mutually supported host key algorithms found!") $ host_key_algos filteredServerKex
         hkFn  = fromJust $ find (\x -> hostKeyAlgorithmName x == hkAlg) clientHostKeys
         serverKexInitPayload = rawPacket serverKex
 

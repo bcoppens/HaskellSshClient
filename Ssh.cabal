@@ -36,7 +36,8 @@ Executable SshClient
     Crypto,
     dlist,
     HsOpenSSL,
-    SHA
+    SHA,
+    safe
 
   If flag(noPureAES)
     Cpp-Options:

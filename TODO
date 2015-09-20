@@ -10,3 +10,6 @@
 * Less dependencies on IO (especially in Monad Stacks)
 * Cabalize
 * Handle errors (MAC, invalid host key cert, etc)
+* Replace usages of fromJust, head, tail with their safe variants (like in KeyExchange)
+* I don't like the safe head versions with an error call either, check if that can be designed better
+
